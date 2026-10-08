@@ -170,3 +170,20 @@ def test_big_message_streams(tmp_path):
     assert res.counts["inserted"] == 2
     att = _db(out).execute("SELECT * FROM attachments").fetchone()
     assert (out / att["path"]).read_bytes() == big
+
+
+def test_per_label_mbox_folder(tmp_path):
+    """Current Takeout layout: one mbox per label; a message can appear in several files."""
+    shared = simple_message(subject="starred inbox msg", labels="Inbox,Starred", thread_id="77")
+    other = simple_message(subject="archived reply", labels="Archived,Opened", thread_id="77")
+    mail = tmp_path / "Takeout" / "Mail"
+    mail.mkdir(parents=True)
+    (mail / "Inbox.mbox").write_bytes(mbox_bytes([("1", shared), ("2", other)]))
+    (mail / "Starred.mbox").write_bytes(mbox_bytes([("1", shared)]))
+    out = tmp_path / "out"
+    res = run_import([str(tmp_path / "Takeout")], ImportOptions(out_dir=out, quiet=True))
+    assert res.counts == dict(seen=3, inserted=2, labels_changed=0, unchanged=1, skipped=0, errors=0)
+    conn = _db(out)
+    assert conn.execute("SELECT count(*) FROM messages").fetchone()[0] == 2
+    t = conn.execute("SELECT * FROM threads WHERE thread_id = '77'").fetchone()
+    assert sorted(json.loads(t["labels_json"])) == ["Archived", "Inbox", "Opened", "Starred"]

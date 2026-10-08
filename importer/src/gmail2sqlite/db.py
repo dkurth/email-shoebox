@@ -101,7 +101,8 @@ CREATE TABLE IF NOT EXISTS threads (
   first_date        INTEGER,
   last_date         INTEGER,
   message_count     INTEGER NOT NULL,
-  participants_json TEXT
+  participants_json TEXT,
+  labels_json       TEXT
 );
 CREATE INDEX IF NOT EXISTS threads_last_date ON threads(last_date);
 
@@ -157,6 +158,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
         version = int(row[0]) if row else None
     if version is not None and version > SCHEMA_VERSION:
         raise SchemaError(f"database schema version {version} is newer than this tool supports ({SCHEMA_VERSION})")
+    # threads is derived data, rebuilt after every import; recreate it if its columns changed.
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(threads)")}
+    if cols and "labels_json" not in cols:
+        conn.execute("DROP TABLE threads")
     conn.executescript("BEGIN;" + SCHEMA + "COMMIT;")
     # Future migrations go here: if version == 1: ...
     set_meta(conn, "schema_version", str(SCHEMA_VERSION))
@@ -271,7 +276,7 @@ class Writer:
         self.conn.execute("DELETE FROM threads")
         self.conn.execute(
             """
-            INSERT INTO threads (thread_id, subject, first_date, last_date, message_count, participants_json)
+            INSERT INTO threads (thread_id, subject, first_date, last_date, message_count, participants_json, labels_json)
             SELECT
               m.thread_id,
               (SELECT m2.subject FROM messages m2
@@ -280,7 +285,11 @@ class Writer:
               min(coalesce(m.received_utc, m.date_utc)),
               max(coalesce(m.received_utc, m.date_utc)),
               count(*),
-              json_group_array(DISTINCT m.from_addr) FILTER (WHERE m.from_addr IS NOT NULL)
+              json_group_array(DISTINCT m.from_addr) FILTER (WHERE m.from_addr IS NOT NULL),
+              (SELECT json_group_array(DISTINCT l.name) FROM messages m3
+                 JOIN message_labels ml ON ml.message_id = m3.id
+                 JOIN labels l ON l.id = ml.label_id
+                WHERE m3.thread_id = m.thread_id)
             FROM messages m
             WHERE m.thread_id IS NOT NULL
             GROUP BY m.thread_id

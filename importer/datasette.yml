@@ -1,0 +1,62 @@
+# Datasette metadata for browsing mail.db before the real web interface exists.
+#   uvx datasette@0.65.5 gmail-archive/mail.db -m datasette.yml
+# (Datasette 0.65 reads table settings from the -m metadata file.)
+title: Gmail archive
+databases:
+  mail:
+    tables:
+      messages:
+        fts_table: messages_fts
+        fts_pk: id
+        sort_desc: received_utc
+        label_column: subject
+      message_list:
+        description: One row per message with readable dates and labels. Use the search box for full-text search.
+        fts_table: messages_fts
+        fts_pk: id
+        sort_desc: received
+      threads:
+        sort_desc: last_date
+        label_column: subject
+      labels:
+        label_column: name
+      messages_fts:
+        hidden: true
+    queries:
+      search:
+        title: Search mail
+        description: "Full-text search. Examples: invoice, \"exact phrase\", people:alice, subject:report, attachment_names:pdf"
+        sql: |-
+          select m.id, datetime(coalesce(m.received_utc, m.date_utc), 'unixepoch') as received,
+                 m.from_name, m.from_addr, m.subject, m.snippet, m.has_attachments
+          from messages m
+          where m.id in (select rowid from messages_fts where messages_fts match :q)
+          order by coalesce(m.received_utc, m.date_utc) desc
+          limit 500
+      label:
+        title: Messages with a label
+        description: "Label names as Gmail shows them, e.g. Inbox, Sent, Starred, or one of your own."
+        sql: |-
+          select m.id, datetime(coalesce(m.received_utc, m.date_utc), 'unixepoch') as received,
+                 m.from_name, m.from_addr, m.subject, m.snippet
+          from messages m
+          join message_labels ml on ml.message_id = m.id
+          join labels l on l.id = ml.label_id
+          where l.name = :label
+          order by coalesce(m.received_utc, m.date_utc) desc
+          limit 1000
+      thread:
+        title: A whole thread
+        description: Paste a thread_id from the messages or threads table.
+        sql: |-
+          select m.id, datetime(coalesce(m.received_utc, m.date_utc), 'unixepoch') as received,
+                 m.from_name, m.from_addr, m.subject, m.body_text
+          from messages m
+          where m.thread_id = :thread_id
+          order by coalesce(m.received_utc, m.date_utc)
+      label_counts:
+        title: Label counts
+        sql: |-
+          select l.name, count(*) as messages
+          from labels l join message_labels ml on ml.label_id = l.id
+          group by l.id order by messages desc
