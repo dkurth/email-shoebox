@@ -1,7 +1,7 @@
 // The app shell: header, sidebar, toolbar, and either the thread list or one thread.
 // Owns routing, data loading, the list cursor and selection, and every action.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ChartColumn, ChevronDown, ChevronLeft, ChevronRight, EllipsisVertical, Keyboard, Mail, Moon, Sun } from "lucide-react";
+import { ArrowLeft, ChartColumn, ChevronDown, ChevronLeft, ChevronRight, EllipsisVertical, Keyboard, Moon, Sun } from "lucide-react";
 import { isSearchView, isUserLabel, removeAction, searchQuery, viewLabel, viewTitle } from "../shared/labels.ts";
 import { highlightTerms, parseQuery } from "../shared/search.ts";
 import type {
@@ -30,6 +30,7 @@ import { ChosenColorsContext, LabelOptions } from "./LabelOptions.tsx";
 import { useTheme } from "./theme.ts";
 import { NoteButton, NotePanel, useNoteSaver } from "./NotePanel.tsx";
 import { SearchBox } from "./SearchBox.tsx";
+import logoUrl from "./shoebox-icon.svg";
 import { SearchHelp } from "./SearchHelp.tsx";
 import { HighlightContext } from "./highlight.tsx";
 import { AdminPage } from "./AdminPage.tsx";
@@ -172,7 +173,7 @@ export function App() {
 
   useEffect(() => {
     const unread = sidebar?.folders.find((f) => f.view === route.view)?.count;
-    document.title = `${admin ? "Archive stats" : viewTitle(route.view)}${unread ? ` (${unread})` : ""} - Mail archive`;
+    document.title = `${admin ? "Archive stats" : viewTitle(route.view)}${unread ? ` (${unread})` : ""} - Gmail Shoebox`;
   }, [route.view, sidebar, admin]);
 
   const noteSaver = useNoteSaver(route.threadId ? thread : null, route.threadId);
@@ -478,9 +479,8 @@ export function App() {
       <div className="app">
         <header className="topbar">
           <a className="brand" href="#/inbox">
-            <Mail className="brand-icon" size={24} aria-hidden /> Mail archive
+            <img className="brand-icon" src={logoUrl} alt="" width={28} height={28} /> Gmail Shoebox
           </a>
-          {session && <span className="archive-path" title={session.archiveDir}>{session.archiveDir}</span>}
           {session?.readOnly && <span className="badge">read-only</span>}
           <SearchBox ref={searchInput} query={query} onSearch={search} onHelp={() => setSearchHelp(true)} />
           <span className="spacer" />

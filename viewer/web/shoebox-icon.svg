@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="14 20 160 160" width="160" height="160">
+  <defs>
+    <clipPath id="base"><path d="M32 100h128v50a12 12 0 0 1-12 12H44a12 12 0 0 1-12-12z"/></clipPath>
+    <clipPath id="lid"><rect x="22" y="50" width="148" height="34" rx="9"/></clipPath>
+    <!-- Handle cut-out: a real hole, so the page shows through in light and dark mode -->
+    <mask id="handle">
+      <rect x="0" y="0" width="192" height="192" fill="#fff"/>
+      <rect x="78" y="128" width="36" height="11" rx="5.5" fill="#000"/>
+    </mask>
+  </defs>
+  <!-- Box base -->
+  <g clip-path="url(#base)" mask="url(#handle)">
+    <rect x="32" y="100" width="64" height="62" fill="#4285F4"/>
+    <rect x="96" y="100" width="64" height="62" fill="#34A853"/>
+    <!-- interior shadow under the rim -->
+    <rect x="32" y="100" width="64" height="10" fill="#1967D2"/>
+    <rect x="96" y="100" width="64" height="10" fill="#188038"/>
+  </g>
+  <!-- Lid, tilted open -->
+  <g transform="rotate(-9 96 84)">
+    <g clip-path="url(#lid)">
+      <rect x="22" y="50" width="74" height="34" fill="#EA4335"/>
+      <rect x="96" y="50" width="74" height="34" fill="#FBBC04"/>
+      <!-- lid lip -->
+      <rect x="22" y="74" width="74" height="10" fill="#C5221F"/>
+      <rect x="96" y="74" width="74" height="10" fill="#F29900"/>
+    </g>
+  </g>
+</svg>

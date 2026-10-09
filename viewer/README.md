@@ -1,13 +1,21 @@
-# local-gmail-viewer
+# Gmail Shoebox
 
-A Gmail-like web viewer for a mail archive made by
-[gmail2sqlite](../gmail2sqlite). It runs on your computer only: one command
-starts a small local server and opens the Inbox in a browser tab.
+Back up your old emails and be able to look through them locally in a familiar interface similar to Gmail.
 
-You can read and search mail, change labels (archive, trash, star, add or
-remove labels, mark read or unread), write notes on conversations, see
-statistics about the archive, delete attachments you don't need, and
-permanently empty the Trash. There is no compose, reply or send.
+- Start with a backup of your Gmail data taken with <a href="https://takeout.google.com/">Google Takeout</a>.
+- Use <a href="https://github.com/dkurth/gmail2sqlite/">gmail2sqlite</a> to turn that backup into a SQLite database.
+- Then use Gmail Shoebox to look through the emails
+
+Bonus features:
+
+- See stats (who did you email the most, etc.)
+- Look through every image attached to any email
+- Review attachments by type and size. All your attachments are kept on your hard drive, but if there are large ones you don't need, you can delete them _without having to delete the email thread_. This is something you can't do in Gmail.
+- Gmail keyboard shortcuts still work
+- Gmail advanced search syntax still works
+- Add notes to a thread. Maybe you want to leave a bit of commentary on something. You can click a Note icon, add a note to a thread, and it is saved locally. Search results will search your notes as well as emails. You can also search for `note:something` to search the content of notes explicitly. They save automatically.
+
+Gmail Shoebox runs locally on your machine, in a browser. Nothing gets sent anywhere. The point of it is to let you archive an old email account for posterity in a form you can easily navigate. There is obviously no Compose feature.
 
 ## Requirements
 
@@ -19,9 +27,10 @@ permanently empty the Trash. There is no compose, reply or send.
 ## Usage
 
 ```sh
-cd local-gmail-viewer
-npm install                       # once
-npm start -- ../gmail-archive     # starts the server and opens http://127.0.0.1:5178/
+cd gmail-shoebox
+npm install                             # run this once
+# Assuming `../data/gmail-archive` contains the mail.db file from gmail2sqlite:
+npm start -- ../data/gmail-archive      # starts the server and opens http://127.0.0.1:5178/
 ```
 
 The first start builds the web front end, which takes a few seconds. Press Ctrl-C to stop.
@@ -36,7 +45,7 @@ Options (after `--`):
 | `--read-only` | open the archive read-only: no label changes, no deletes, and opening a thread doesn't mark it read |
 | `--me ADDR` | your address, shown as "me" (normally found from your Sent mail; remembered in the archive) |
 
-`npm link` adds a global `gmail-viewer` command: `gmail-viewer ~/gmail-archive`.
+# Everything from here down was written by AI and may/may not be helpful to you
 
 ## What it does
 
