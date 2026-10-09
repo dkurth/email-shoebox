@@ -73,7 +73,8 @@ CREATE TABLE IF NOT EXISTS messages (
   import_id       INTEGER REFERENCES imports(id),
   labels_edited_at INTEGER   -- set by a viewer when it changes labels; imports then keep them
 );
-CREATE INDEX IF NOT EXISTS messages_thread   ON messages(thread_id);
+-- (thread_id, date): groups messages into threads without reading the wide message rows.
+CREATE INDEX IF NOT EXISTS messages_thread_date ON messages(thread_id, received_utc, date_utc);
 CREATE INDEX IF NOT EXISTS messages_received ON messages(received_utc);
 CREATE INDEX IF NOT EXISTS messages_date     ON messages(date_utc);
 CREATE INDEX IF NOT EXISTS messages_from     ON messages(from_addr);
@@ -187,6 +188,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("COMMIT")
         rebuild_fts = True
     conn.executescript("BEGIN;" + SCHEMA + "COMMIT;")
+    conn.execute("DROP INDEX IF EXISTS messages_thread")  # replaced by messages_thread_date
     if rebuild_fts:
         rebuild_fts_index(conn)
     set_meta(conn, "schema_version", str(SCHEMA_VERSION))

@@ -47,7 +47,11 @@ All paths stored in the database are relative to this folder and use `/`.
 | `import_id` | INTEGER | the `imports` row that first stored this message |
 | `labels_edited_at` | INTEGER | set by a viewer when it changes this message's labels; imports then keep those labels (see below) |
 
-Indexes: `thread_id`, `received_utc`, `date_utc`, `from_addr`, `message_id`.
+Indexes: `(thread_id, received_utc, date_utc)`, `received_utc`, `date_utc`, `from_addr`, `message_id`.
+
+**Performance note for readers:** rows hold full bodies, so scanning `messages` reads
+the whole database. Filter through indexes (`message_labels(label_id, message_id)`,
+the thread index) rather than on columns such as `is_unread`.
 
 ## `labels` and `message_labels`
 
