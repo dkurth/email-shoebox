@@ -595,3 +595,21 @@ test("duplicates: Merge duplicate files shows progress and the space freed", asy
   // The files stay listed as duplicates (each email still has its attachment).
   await expect(page.locator(".dupe-banner")).toContainText("2 files are stored more than once");
 });
+
+test("Images tab: the grid, the lightbox moves between images, Delete removes one", async ({ page }) => {
+  server = await startServer();
+  await page.goto(server.url + "#/admin/images");
+  await expect(page.locator(".pager")).toContainText("No images match."); // every test image is under 20 KB
+  await page.getByLabel("Hide images under 20 KB").click();
+  await expect(page.locator(".gallery li")).toHaveCount(3);
+  await page.locator(".gallery .tile").first().click();
+  await expect(page.locator(".lightbox-name")).toHaveText("coupon.png");
+  await page.keyboard.press("ArrowRight");
+  await expect(page.locator(".lightbox-name")).toHaveText("sunset.jpg");
+  await expect(page.locator(".lightbox-details")).toContainText("Fwd: Holiday media");
+  await page.locator(".lightbox-top").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Delete attachment" }).click();
+  await expect(page.locator(".lightbox-name")).toHaveText("beach.png"); // the next image
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".gallery li")).toHaveCount(3); // the other sunset.jpg copy shows now
+});

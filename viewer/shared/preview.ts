@@ -4,7 +4,7 @@
 export type PreviewKind = "image" | "audio" | "video" | "pdf" | "text";
 
 // Never SVG (it can hold script), HTML, XML or message/rfc822.
-const TYPES: Record<string, [PreviewKind, string]> = {
+export const TYPES: Record<string, [PreviewKind, string]> = {
   "image/jpeg": ["image", "image/jpeg"],
   "image/jpg": ["image", "image/jpeg"],
   "image/pjpeg": ["image", "image/jpeg"],
@@ -40,7 +40,7 @@ const TYPES: Record<string, [PreviewKind, string]> = {
 };
 
 // For files sent without a useful type (application/octet-stream or none).
-const EXTENSIONS: Record<string, string> = {
+export const EXTENSIONS: Record<string, string> = {
   jpg: "image/jpeg", jpeg: "image/jpeg", jpe: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp",
   bmp: "image/bmp", avif: "image/avif",
   mp3: "audio/mpeg", m4a: "audio/mp4", aac: "audio/aac", wav: "audio/wav", ogg: "audio/ogg", oga: "audio/ogg",
@@ -50,6 +50,9 @@ const EXTENSIONS: Record<string, string> = {
   txt: "text/plain", text: "text/plain", log: "text/plain", csv: "text/csv", md: "text/markdown",
 };
 
+/** Content types that say nothing about the file; the extension decides. */
+export const UNTYPED = ["application/octet-stream", "binary/octet-stream", "application/x-download"];
+
 function extension(filename: string | null | undefined): string {
   const m = /\.([a-z0-9]{1,5})$/i.exec(filename ?? "");
   return m ? m[1].toLowerCase() : "";
@@ -58,7 +61,7 @@ function extension(filename: string | null | undefined): string {
 /** The preview kind and the safe content type to serve, or null if the browser should only download it. */
 export function preview(contentType: string | null | undefined, filename: string | null | undefined): { kind: PreviewKind; type: string } | null {
   let type = (contentType ?? "").split(";")[0].trim().toLowerCase();
-  if (!type || type === "application/octet-stream" || type === "binary/octet-stream" || type === "application/x-download") {
+  if (!type || UNTYPED.includes(type)) {
     type = EXTENSIONS[extension(filename)] ?? "";
   }
   const hit = TYPES[type];

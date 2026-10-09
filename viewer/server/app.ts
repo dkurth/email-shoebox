@@ -15,6 +15,7 @@ import { isSearchView, searchQuery } from "../shared/labels.ts";
 import { NoteConflict, NotFound, saveNote } from "./notes.ts";
 import { imports, labels as adminLabels, lists, overview, people, person } from "./admin.ts";
 import { Busy, jobState, startJob } from "./jobs.ts";
+import { gallery } from "./gallery.ts";
 import { dupeGroups, dupeSummary, report, summary as attachmentSummary, type ReportQuery } from "./attachmentReport.ts";
 import { TYPE_GROUPS } from "../shared/fileTypes.ts";
 import { collectNotes, exportFilename, toCsv, toMarkdown } from "./exportNotes.ts";
@@ -148,6 +149,19 @@ export function createApp(opts: AppOptions): Hono {
     return c.json(rq.dupes && !rq.sha256 ? { groups: dupeGroups(db, rq) } : report(db, rq));
   });
   app.get("/api/admin/attachments/dupes-summary", (c) => c.json(dupeSummary(db)));
+  app.get("/api/admin/images", (c) => {
+    const year = c.req.query("year");
+    if (year && !/^\d{4}$/.test(year)) throw new BadRequest("year must be a 4-digit year");
+    return c.json(
+      gallery(db, {
+        from: c.req.query("from") || undefined,
+        year: year ? Number(year) : undefined,
+        inline: flag(c.req.query("inline")),
+        small: flag(c.req.query("small")),
+        page: intParam(c.req.query("page"), 1),
+      }),
+    );
+  });
   app.get("/api/admin/dedupe", (c) => c.json(jobState("dedupe")));
   app.post("/api/admin/dedupe", (c) => c.json(startJob("dedupe", new URL("./dedupeWorker.ts", import.meta.url), { archiveDir: archive.dir })));
   app.get("/api/admin/person", (c) => {

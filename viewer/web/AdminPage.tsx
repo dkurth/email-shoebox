@@ -7,6 +7,7 @@ import { fullDate, size } from "./format.ts";
 import { go } from "./route.ts";
 import { PeopleTab, PersonPage } from "./AdminPeople.tsx";
 import { AttachmentsTab } from "./AdminAttachments.tsx";
+import { ImagesTab } from "./AdminImages.tsx";
 
 export interface AdminTab {
   id: string;
@@ -306,6 +307,7 @@ export const TABS: AdminTab[] = [
   { id: "overview", name: "Overview", render: (p) => <Overview {...p} /> },
   { id: "people", name: "People", render: (p) => <PeopleTab {...p} /> },
   { id: "attachments", name: "Attachments", render: (p) => <AttachmentsTab {...p} /> },
+  { id: "images", name: "Images", render: (p) => <ImagesTab {...p} /> },
   { id: "imports", name: "Imports", render: () => <Imports /> },
 ];
 

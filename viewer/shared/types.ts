@@ -257,3 +257,22 @@ export interface DedupeProgress {
   bytesFreed: number;
   skipped: string[]; // why a file or a copy was left alone
 }
+
+export interface GalleryImage {
+  id: number; // attachment id
+  messageId: number;
+  threadId: string;
+  date: number | null;
+  fromAddr: string | null;
+  fromName: string | null;
+  subject: string | null;
+  filename: string | null;
+  size: number;
+}
+
+export interface GalleryPage {
+  images: GalleryImage[];
+  total: number;
+  years: number[]; // years that have images (for the filter)
+  senders: string[]; // the 50 senders with the most images (suggestions)
+}
