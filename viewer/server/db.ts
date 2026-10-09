@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { ChosenColors } from "../shared/labelColors.ts";
 
-export const SUPPORTED_SCHEMA_VERSIONS = [2];
+export const SUPPORTED_SCHEMA_VERSIONS = [3];
 
 export type DB = Database.Database;
 
@@ -32,7 +32,7 @@ export function openArchive(dir: string, opts: { readOnly?: boolean } = {}): Arc
     db.close();
     const hint =
       version < Math.min(...SUPPORTED_SCHEMA_VERSIONS)
-        ? "Upgrade it by running `gmail2sqlite import` (version 0.2.0 or later) on it again."
+        ? "Upgrade it by running `gmail2sqlite import` (version 0.3.0 or later) on it again."
         : "Update local-gmail-viewer.";
     throw new ArchiveError(
       `${file} has schema version ${row?.value ?? "unknown"}; this viewer supports ${SUPPORTED_SCHEMA_VERSIONS.join(", ")}. ${hint}`,

@@ -9,7 +9,7 @@ describe("session and archive checks", () => {
     const { get } = setup();
     const r = await get("/api/session");
     expect(r.status).toBe(200);
-    expect(r.body).toMatchObject({ me: ["me@example.com"], schemaVersion: 2, readOnly: false });
+    expect(r.body).toMatchObject({ me: ["me@example.com"], schemaVersion: 3, readOnly: false });
   });
 
   it("refuses an archive with an unsupported schema version", () => {

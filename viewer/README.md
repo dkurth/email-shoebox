@@ -11,7 +11,7 @@ compose, reply or send.
 ## Requirements
 
 - **Node 24** or later (`node --version`).
-- An archive folder made by **gmail2sqlite 0.2.1 or later** (it holds `mail.db`
+- An archive folder made by **gmail2sqlite 0.3.0 or later** (it holds `mail.db`
   and `attachments/`). Older archives are upgraded by running
   `gmail2sqlite import` on them again.
 
