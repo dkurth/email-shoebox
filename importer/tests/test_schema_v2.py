@@ -94,7 +94,7 @@ def test_v1_archive_upgrades(tmp_path):
     )
     c.close()
     conn = db.connect(out)
-    assert conn.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()[0] == "2"
+    assert conn.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()[0] == str(db.SCHEMA_VERSION)
     assert "contentless_delete" in conn.execute("SELECT sql FROM sqlite_master WHERE name='messages_fts'").fetchone()[0]
     # The index was rebuilt from stored bodies, people and attachment names.
     for q, n in (("alpha", 1), ("bravo", 1), ("people:alice", 2), ("attachment_names:x", 1)):

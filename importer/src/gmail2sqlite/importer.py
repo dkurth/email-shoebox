@@ -125,8 +125,11 @@ def _insert_new(w: db.Writer, out_dir: Path, raw: RawMessage, import_id: int) ->
             is_important=int("Important" in labels),
             parse_error="\n".join(errors) or None,
             import_id=import_id,
+            list_id=pm.list_id,
+            list_name=pm.list_name,
         )
     )
+    w.insert_addresses(mid, [("from", [pm.from_] if pm.from_ else []), ("to", pm.to), ("cc", pm.cc), ("bcc", pm.bcc)])
     for part, s in saved:
         w.insert_attachment(
             dict(

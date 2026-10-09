@@ -9,9 +9,9 @@ import time
 from pathlib import Path
 
 from . import __version__
-from .parse import SEARCH_TEXT_MAX_CHARS, html_to_text
+from .parse import SEARCH_TEXT_MAX_CHARS, html_to_text, list_id_from_headers
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 DB_FILENAME = "mail.db"
 
 SCHEMA = """
@@ -71,7 +71,9 @@ CREATE TABLE IF NOT EXISTS messages (
   is_important    INTEGER NOT NULL DEFAULT 0,
   parse_error     TEXT,
   import_id       INTEGER REFERENCES imports(id),
-  labels_edited_at INTEGER   -- set by a viewer when it changes labels; imports then keep them
+  labels_edited_at INTEGER,  -- set by a viewer when it changes labels; imports then keep them
+  list_id         TEXT,      -- from List-Id: the part in <>, lower-cased
+  list_name       TEXT       -- from List-Id: the decoded text before <>
 );
 -- (thread_id, date): groups messages into threads without reading the wide message rows.
 CREATE INDEX IF NOT EXISTS messages_thread_date ON messages(thread_id, received_utc, date_utc);
@@ -79,6 +81,19 @@ CREATE INDEX IF NOT EXISTS messages_received ON messages(received_utc);
 CREATE INDEX IF NOT EXISTS messages_date     ON messages(date_utc);
 CREATE INDEX IF NOT EXISTS messages_from     ON messages(from_addr);
 CREATE INDEX IF NOT EXISTS messages_msgid    ON messages(message_id);
+CREATE INDEX IF NOT EXISTS messages_size     ON messages(size_bytes);
+CREATE INDEX IF NOT EXISTS messages_list     ON messages(list_id) WHERE list_id IS NOT NULL;
+
+-- One row per address on a message, so readers can find "mail to/from X" without reading
+-- the JSON columns of every message. Derived from from_*/to_json/cc_json/bcc_json.
+CREATE TABLE IF NOT EXISTS message_addresses (
+  message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  role       TEXT NOT NULL,              -- from | to | cc | bcc
+  addr       TEXT NOT NULL,              -- lower-cased
+  name       TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS message_addresses_addr ON message_addresses(addr, role);
+CREATE INDEX IF NOT EXISTS message_addresses_msg  ON message_addresses(message_id);
 
 CREATE TABLE IF NOT EXISTS labels (
   id   INTEGER PRIMARY KEY,
@@ -103,9 +118,11 @@ CREATE TABLE IF NOT EXISTS attachments (
   sha256       TEXT NOT NULL,
   content_id   TEXT,
   is_inline    INTEGER NOT NULL DEFAULT 0,
+  deleted_at   INTEGER,   -- set by a viewer when it deletes the file; the row stays
   UNIQUE (message_id, part_index)
 );
 CREATE INDEX IF NOT EXISTS attachments_sha256 ON attachments(sha256);
+CREATE INDEX IF NOT EXISTS attachments_size   ON attachments(size_bytes);
 
 CREATE TABLE IF NOT EXISTS threads (
   thread_id         TEXT PRIMARY KEY,
@@ -126,6 +143,32 @@ CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
   contentless_delete = 1,
   tokenize = 'unicode61 remove_diacritics 2'
 );
+
+-- The owner's notes on a thread. Imports never change them. No foreign key: threads is
+-- rebuilt on every import. Times are Unix MILLISECONDS (autosave can save twice in a second).
+CREATE TABLE IF NOT EXISTS thread_notes (
+  id         INTEGER PRIMARY KEY,
+  thread_id  TEXT NOT NULL UNIQUE,
+  body       TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+-- External content: notes are small, so snippet() and highlight() can work here.
+CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
+  body, content = 'thread_notes', content_rowid = 'id',
+  tokenize = 'unicode61 remove_diacritics 2'
+);
+-- These keep notes_fts in step, whoever writes thread_notes.
+CREATE TRIGGER IF NOT EXISTS thread_notes_ai AFTER INSERT ON thread_notes BEGIN
+  INSERT INTO notes_fts(rowid, body) VALUES (new.id, new.body);
+END;
+CREATE TRIGGER IF NOT EXISTS thread_notes_ad AFTER DELETE ON thread_notes BEGIN
+  INSERT INTO notes_fts(notes_fts, rowid, body) VALUES ('delete', old.id, old.body);
+END;
+CREATE TRIGGER IF NOT EXISTS thread_notes_au AFTER UPDATE ON thread_notes BEGIN
+  INSERT INTO notes_fts(notes_fts, rowid, body) VALUES ('delete', old.id, old.body);
+  INSERT INTO notes_fts(rowid, body) VALUES (new.id, new.body);
+END;
 
 -- A readable list for Datasette and ad-hoc SQL.
 CREATE VIEW IF NOT EXISTS message_list AS
@@ -176,6 +219,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if cols and "labels_json" not in cols:
         conn.execute("DROP TABLE threads")
     rebuild_fts = False
+    backfill_v3 = False
     if version == 1:
         print("Upgrading database to schema version 2 (rebuilding the search index)...", file=sys.stderr)
         conn.execute("BEGIN")
@@ -187,12 +231,62 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("UPDATE messages SET thread_id = gmail_id WHERE thread_id IS NULL")
         conn.execute("COMMIT")
         rebuild_fts = True
+        version = 2
+    if version == 2:
+        print("Upgrading database to schema version 3 (adding address and mailing-list data)...", file=sys.stderr)
+        conn.execute("BEGIN")
+        _add_column(conn, "messages", "list_id", "TEXT")
+        _add_column(conn, "messages", "list_name", "TEXT")
+        _add_column(conn, "attachments", "deleted_at", "INTEGER")
+        conn.execute("COMMIT")
+        backfill_v3 = True
     conn.executescript("BEGIN;" + SCHEMA + "COMMIT;")
     conn.execute("DROP INDEX IF EXISTS messages_thread")  # replaced by messages_thread_date
     if rebuild_fts:
         rebuild_fts_index(conn)
+    if backfill_v3:
+        _backfill_v3(conn)
     set_meta(conn, "schema_version", str(SCHEMA_VERSION))
     set_meta(conn, "tool_version", __version__)
+
+
+def _add_column(conn: sqlite3.Connection, table: str, column: str, decl: str) -> None:
+    if column not in {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+
+
+def _backfill_v3(conn: sqlite3.Connection) -> None:
+    """Fill message_addresses and list_id/list_name for messages stored before schema v3 (no mbox needed)."""
+    total = conn.execute("SELECT count(*) FROM messages").fetchone()[0]
+    conn.execute("BEGIN")
+    conn.execute("DELETE FROM message_addresses")
+    # Reads every row once (one pass over the whole file). The UPDATEs of messages wait until the end.
+    cur = conn.execute("SELECT id, from_name, from_addr, to_json, cc_json, bcc_json, headers_raw FROM messages")
+    addrs: list[tuple] = []
+    lists: list[tuple] = []
+    done = 0
+    for mid, from_name, from_addr, to_json, cc_json, bcc_json, headers_raw in cur:
+        if from_addr:
+            addrs.append((mid, "from", from_addr, from_name or ""))
+        for role, col in (("to", to_json), ("cc", cc_json), ("bcc", bcc_json)):
+            for a in json.loads(col or "[]"):
+                if a.get("addr"):
+                    addrs.append((mid, role, a["addr"], a.get("name") or ""))
+        try:
+            lid, lname = list_id_from_headers(headers_raw)
+        except Exception:  # a broken header; leave the columns empty
+            lid, lname = None, None
+        if lid:
+            lists.append((lid, lname, mid))
+        done += 1
+        if len(addrs) >= 10_000:
+            conn.executemany("INSERT INTO message_addresses(message_id, role, addr, name) VALUES (?, ?, ?, ?)", addrs)
+            addrs.clear()
+        if done % 10_000 == 0:
+            print(f"  {done:,} of {total:,} messages", file=sys.stderr)
+    conn.executemany("INSERT INTO message_addresses(message_id, role, addr, name) VALUES (?, ?, ?, ?)", addrs)
+    conn.executemany("UPDATE messages SET list_id = ?, list_name = ? WHERE id = ?", lists)
+    conn.execute("COMMIT")
 
 
 def set_meta(conn: sqlite3.Connection, key: str, value: str) -> None:
@@ -272,6 +366,13 @@ class Writer:
         cols = ", ".join(row)
         marks = ", ".join("?" for _ in row)
         self.conn.execute(f"INSERT INTO attachments ({cols}) VALUES ({marks})", tuple(row.values()))
+
+    def insert_addresses(self, message_id: int, roles: list[tuple[str, list]]) -> None:
+        """roles: [("from", [Address]), ("to", [...]), ...]. Addresses without an addr are skipped."""
+        self.conn.executemany(
+            "INSERT INTO message_addresses(message_id, role, addr, name) VALUES (?, ?, ?, ?)",
+            [(message_id, role, a.addr, a.name or "") for role, lst in roles for a in lst if a.addr],
+        )
 
     def insert_fts(self, message_id: int, subject: str, people: str, body: str, attachment_names: str) -> None:
         self.conn.execute(

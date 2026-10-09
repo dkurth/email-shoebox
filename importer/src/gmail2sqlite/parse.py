@@ -28,6 +28,7 @@ SEARCH_TEXT_MAX_CHARS = 500_000  # cap on body text sent to the full-text index
 
 _FOLD_RE = re.compile(r"\r?\n(?=[ \t])")
 _WS_RE = re.compile(r"\s+")
+_LIST_ID_RE = re.compile(r"^list-id:[ \t]*(.*(?:\n[ \t].*)*)", re.IGNORECASE | re.MULTILINE)
 _HEADER_END_RE = re.compile(rb"\r?\n\r?\n")
 
 # Charset labels seen in the wild, mapped to what Python should use.
@@ -92,6 +93,8 @@ class ParsedMessage:
     snippet: str | None = None
     search_text: str = ""  # body as plain text, for the full-text index
     headers_raw: str = ""
+    list_id: str | None = None  # List-Id: the part in <>, lower-cased
+    list_name: str | None = None  # List-Id: the decoded text before <>
     labels: list[str] = field(default_factory=list)
     attachments: list[AttachmentPart] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
@@ -196,6 +199,29 @@ def parse_addresses(raw_values: list[str]) -> list[Address]:
         if name or addr:
             out.append(Address(name, addr))
     return out
+
+
+def parse_list_id(value: str | None) -> tuple[str | None, str | None]:
+    """RFC 2919 List-Id: 'Name <id>' -> (id lower-cased, name). A value with no <> is all id."""
+    if not value:
+        return None, None
+    v = _clean(decode_words(_unfold(value))).strip()
+    m = re.search(r"<([^<>]*)>", v)
+    if m:
+        lid = m.group(1).strip().lower()
+        name = v[: m.start()].strip().strip('"').strip()
+    else:
+        lid = v.strip().strip('"').strip().lower()
+        name = ""
+    if not lid:
+        return None, None
+    return lid, name or None
+
+
+def list_id_from_headers(headers_raw: str | None) -> tuple[str | None, str | None]:
+    """Find the first List-Id header in a stored header block (messages.headers_raw)."""
+    m = _LIST_ID_RE.search(headers_raw or "")
+    return parse_list_id(m.group(1)) if m else (None, None)
 
 
 def parse_labels(value: str | None) -> list[str]:
@@ -383,6 +409,10 @@ def _record(pm: ParsedMessage, what: str, exc: BaseException) -> None:
     pm.errors.append(f"{what}: {type(exc).__name__}: {exc}"[:500])
 
 
+def _set_list(pm: ParsedMessage, h: _Headers) -> None:
+    pm.list_id, pm.list_name = parse_list_id(h.raw("List-Id"))
+
+
 def parse_message(data: bytes) -> ParsedMessage:
     pm = ParsedMessage()
     pm.headers_raw = decode_bytes(split_headers(data)).replace("\r\n", "\n")
@@ -403,6 +433,7 @@ def parse_message(data: bytes) -> ParsedMessage:
         ("in-reply-to", lambda: setattr(pm, "in_reply_to", h.text("In-Reply-To") or None)),
         ("references", lambda: setattr(pm, "references", h.text("References") or None)),
         ("labels", lambda: setattr(pm, "labels", parse_labels(h.raw("X-Gmail-Labels")))),
+        ("list-id", lambda: _set_list(pm, h)),
         ("date", lambda: (setattr(pm, "date_raw", h.text("Date")), setattr(pm, "date_utc", parse_date(pm.date_raw)))),
     ):
         try:
