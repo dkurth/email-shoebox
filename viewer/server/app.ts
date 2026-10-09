@@ -5,6 +5,7 @@ import path from "node:path";
 import { viewLabel, type View } from "../shared/labels.ts";
 import { serveAttachment } from "./attachments.ts";
 import type { Archive } from "./db.ts";
+import { InputError, createLabel, deleteLabel, modifyThreads, setStar, undoChanges } from "./mutations.ts";
 import { guard } from "./security.ts";
 import { listThreads, original, sidebar, threadDetail } from "./views.ts";
 
@@ -34,7 +35,9 @@ export function createApp(opts: AppOptions): Hono {
   const app = new Hono();
 
   app.onError((err, c) => {
-    if (err instanceof BadRequest || err.message.startsWith("unknown view")) return c.json({ error: err.message }, 400);
+    if (err instanceof BadRequest || err instanceof InputError || err instanceof SyntaxError || err.message.startsWith("unknown view")) {
+      return c.json({ error: err.message }, 400);
+    }
     console.error(err);
     return c.json({ error: err.message }, 500);
   });
@@ -76,6 +79,23 @@ export function createApp(opts: AppOptions): Hono {
 
   app.get("/api/attachments/:id/download", (c) => serveAttachment(c, archive, intParam(c.req.param("id")), "download"));
   app.get("/api/attachments/:id/inline", (c) => serveAttachment(c, archive, intParam(c.req.param("id")), "inline"));
+
+  // ---- writes (the guard already refused them in read-only mode)
+  app.post("/api/threads/modify", async (c) => {
+    const body = await c.req.json();
+    return c.json(modifyThreads(db, { ...body, view: viewParam(body.view) }));
+  });
+  app.post("/api/threads/star", async (c) => {
+    const body = await c.req.json();
+    if (!Array.isArray(body.threadIds)) throw new BadRequest("threadIds must be a list");
+    return c.json(setStar(db, viewParam(body.view), body.threadIds, !!body.starred));
+  });
+  app.post("/api/undo", async (c) => {
+    const body = await c.req.json();
+    return c.json({ undone: undoChanges(db, body.changes) });
+  });
+  app.post("/api/labels", async (c) => c.json(createLabel(db, (await c.req.json()).name)));
+  app.delete("/api/labels/:id", (c) => c.json(deleteLabel(db, intParam(c.req.param("id")))));
 
   app.all("/api/*", (c) => c.json({ error: "Not found" }, 404));
 
