@@ -375,11 +375,6 @@ export function App() {
               }}
             />
           )}
-          {!hasTargets && (
-            <button className="icon-button" title="Refresh" onClick={reload}>
-              ⟳
-            </button>
-          )}
           {hasTargets && !readOnly && (
             <span className="actions">
               {remove && <button className="text-button" title={`${remove.button} (y)`} onClick={actions.remove}>{remove.button}</button>}
