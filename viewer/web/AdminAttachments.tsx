@@ -19,6 +19,8 @@ export interface ReportExtras {
   /** Extra controls for each row (delete, select), added by later parts of the page. */
   rowStart?: (r: AttachmentRow) => ReactNode;
   rowEnd?: (r: AttachmentRow) => ReactNode;
+  headStart?: (rows: AttachmentRow[]) => ReactNode; // the header cell above rowStart
+  barStart?: (rows: AttachmentRow[], total: number) => ReactNode; // left of the pager
 }
 
 function Summary({ inline, setParams, version }: { inline: boolean; setParams: AdminProps["setParams"]; version: number }) {
@@ -171,6 +173,7 @@ export function AttachmentList(props: AdminProps & ReportExtras & { version?: nu
   return (
     <>
       <div className="report-bar">
+        {props.barStart?.(data.rows, data.total)}
         <span className="pager">
           {data.total ? `${num(start + 1)}–${num(Math.min(data.total, start + PAGE))} of ${num(data.total)}` : "No attachments match."}
           <button className="icon-button" title="Previous" disabled={page <= 1} onClick={() => setParams({ page: page - 1 > 1 ? page - 1 : null })}>‹</button>
@@ -180,7 +183,7 @@ export function AttachmentList(props: AdminProps & ReportExtras & { version?: nu
       <table className="admin-table report">
         <thead>
           <tr>
-            {props.rowStart && <th className="check" />}
+            {props.rowStart && <th className="check">{props.headStart?.(data.rows)}</th>}
             {header("name", "File name")}
             {header("size", "Size", true)}
             <th>Type</th>
@@ -289,10 +292,107 @@ export function useAttachmentDelete(onDone: () => void) {
   return { ask, ui };
 }
 
+/** The report's filter as the server's delete call takes it (the same names as the URL). */
+function filterOf(params: URLSearchParams): Record<string, string> {
+  const f: Record<string, string> = {};
+  for (const k of ["type", "from", "min", "inline", "dupes"]) {
+    const v = params.get(k);
+    if (v) f[k] = v;
+  }
+  return f;
+}
+
+/** Checkboxes: pick rows, or every attachment that matches the filter. */
+function useSelection(params: URLSearchParams) {
+  const [picked, setPicked] = useState<Map<number, number>>(new Map()); // id -> size
+  const [allMatching, setAllMatching] = useState<{ count: number; bytes: number } | null>(null);
+  const key = params.toString();
+  const [lastKey, setLastKey] = useState(key);
+  if (key !== lastKey) {
+    // A new filter, sort or page clears the selection.
+    setLastKey(key);
+    setPicked(new Map());
+    setAllMatching(null);
+  }
+  const clear = () => {
+    setPicked(new Map());
+    setAllMatching(null);
+  };
+  return { picked, setPicked, allMatching, setAllMatching, clear };
+}
+
 export function AttachmentsTab(props: AdminProps) {
   const { params, setParams, readOnly } = props;
   const [version, setVersion] = useState(0);
-  const del = useAttachmentDelete(() => setVersion((v) => v + 1));
+  const sel = useSelection(params);
+  const del = useAttachmentDelete(() => {
+    sel.clear();
+    setVersion((v) => v + 1);
+  });
+  const live = (rows: AttachmentRow[]) => rows.filter((r) => !r.deletedAt);
+  const toggle = (r: AttachmentRow) =>
+    sel.setPicked((m) => {
+      const n = new Map(m);
+      if (n.has(r.id)) n.delete(r.id);
+      else n.set(r.id, r.size);
+      return n;
+    });
+  const pickedBytes = [...sel.picked.values()].reduce((s, b) => s + b, 0);
+  const selectAllMatching = async () => {
+    const s = await post<{ count: number; bytes: number }>("/api/attachments/delete-summary", { filter: filterOf(params) });
+    sel.setAllMatching(s);
+  };
+  const selection = readOnly
+    ? {}
+    : {
+        rowStart: (r: AttachmentRow) =>
+          r.deletedAt ? null : (
+            <input type="checkbox" aria-label={`Select ${r.filename ?? "attachment"}`} checked={!!sel.allMatching || sel.picked.has(r.id)} disabled={!!sel.allMatching} onChange={() => toggle(r)} />
+          ),
+        headStart: (rows: AttachmentRow[]) => {
+          const page = live(rows);
+          const all = page.length > 0 && page.every((r) => sel.picked.has(r.id));
+          return (
+            <input
+              type="checkbox"
+              aria-label="Select every attachment on this page"
+              checked={!!sel.allMatching || all}
+              onChange={() => {
+                sel.setAllMatching(null);
+                sel.setPicked(all ? new Map() : new Map(page.map((r) => [r.id, r.size])));
+              }}
+            />
+          );
+        },
+        barStart: (rows: AttachmentRow[], total: number) => {
+          const page = live(rows);
+          const pageAll = page.length > 0 && page.every((r) => sel.picked.has(r.id));
+          if (sel.allMatching) {
+            return (
+              <span className="selection-bar">
+                <button className="text-button danger filled" onClick={() => del.ask({ filter: filterOf(params) })}>
+                  Delete all {num(sel.allMatching.count)} ({size(sel.allMatching.bytes)})
+                </button>
+                All {num(sel.allMatching.count)} attachments that match are selected.
+                <button className="link-button" onClick={sel.clear}>Clear selection</button>
+              </span>
+            );
+          }
+          if (!sel.picked.size) return null;
+          return (
+            <span className="selection-bar">
+              <button className="text-button danger filled" onClick={() => del.ask({ ids: [...sel.picked.keys()] })}>
+                Delete selected ({num(sel.picked.size)} file{sel.picked.size === 1 ? "" : "s"}, {size(pickedBytes)})
+              </button>
+              {pageAll && total > page.length && (
+                <button className="link-button" onClick={() => void selectAllMatching()}>
+                  Select all {num(total)} attachments that match
+                </button>
+              )}
+            </span>
+          );
+        },
+      };
   return (
     <div className="admin-attachments">
       {del.ui}
@@ -302,6 +402,7 @@ export function AttachmentsTab(props: AdminProps) {
         <Filters {...props} />
         <AttachmentList
           {...props}
+          {...selection}
           version={version}
           rowEnd={readOnly ? undefined : (r) => (r.deletedAt ? null : <button className="link-button danger-link" onClick={() => del.ask({ ids: [r.id] })}>Delete</button>)}
         />

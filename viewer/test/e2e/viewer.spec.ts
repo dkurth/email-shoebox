@@ -512,3 +512,52 @@ test("read-only: no delete buttons", async ({ page }) => {
   await expect(page.locator(".admin-table.report tbody tr").first()).toContainText("voice-memo.mp3");
   await expect(page.locator(".admin-table.report").getByRole("button", { name: "Delete" })).toHaveCount(0);
 });
+
+test("deleting many: checkboxes in the report, the page checkbox, a whole thread", async ({ page }) => {
+  server = await startServer();
+  await page.goto(server.url + "#/admin/attachments");
+  const rows = page.locator(".admin-table.report tbody tr");
+  await rows.filter({ hasText: "report.xlsx" }).getByRole("checkbox").check();
+  await rows.filter({ hasText: "itinerary.pdf" }).getByRole("checkbox").check();
+  await page.getByRole("button", { name: /Delete selected \(2 files, 22 B\)/ }).click();
+  const dialog = page.getByRole("alertdialog");
+  await expect(dialog).toContainText("Delete 2 attachments (22 B)");
+  await expect(dialog.locator(".confirm-list li")).toHaveText(["itinerary.pdf", "report.xlsx"]);
+  await dialog.getByRole("button", { name: "Delete 2 attachments" }).click();
+  await expect(page.locator(".info-banner")).toContainText("2 attachments deleted");
+  await expect(rows.filter({ hasText: "report.xlsx" })).toHaveCount(0);
+
+  // The page checkbox. ("Select all N that match" needs more than one page of attachments;
+  // server.attachmentDelete.test.ts covers deleting by filter.)
+  await page.goto(server.url + "#/admin/attachments?type=Images");
+  await page.getByLabel("Select every attachment on this page").check();
+  await page.getByRole("button", { name: /Delete selected \(6 files/ }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Delete 6 attachments" }).click();
+  await expect(page.locator(".report-bar")).toContainText("No attachments match.");
+
+  await page.goto(server.url + "#/label/Media");
+  await page.locator(".thread-row", { hasText: "Holiday media" }).filter({ hasNotText: "Fwd" }).click();
+  await page.getByRole("button", { name: "More" }).click();
+  await page.getByRole("menuitem", { name: /Delete all attachments/ }).click();
+  const d2 = page.getByRole("alertdialog", { name: "Delete attachments" });
+  await expect(d2).toContainText("Delete 4 attachments");
+  await d2.getByRole("button", { name: "Delete attachments" }).click();
+  await expect(page.locator(".toast")).toContainText("4 attachments deleted.");
+  await expect(page.locator(".file-chip.deleted")).toHaveCount(8);
+  await expect(page.getByRole("button", { name: "More" })).toHaveCount(0);
+});
+
+test("delete all in a thread can include images inside the email text", async ({ page }) => {
+  server = await startServer();
+  await page.goto(server.url + "#/inbox");
+  await page.locator(".thread-row", { hasText: "Big sale" }).click();
+  await page.getByRole("button", { name: "More" }).click();
+  await page.getByRole("menuitem", { name: /Delete all attachments/ }).click();
+  const d = page.getByRole("alertdialog", { name: "Delete attachments" });
+  await expect(d.getByRole("button", { name: "Delete attachments" })).toBeDisabled(); // only the logo, inside the text
+  await d.getByRole("checkbox").check();
+  await expect(d).toContainText("Delete 1 attachment (70 B)");
+  await d.getByRole("button", { name: "Delete attachments" }).click();
+  await expect(page.locator(".toast")).toContainText("1 attachment deleted.");
+  await expect(page.frameLocator(".html-body iframe").locator('img[alt="logo"]')).toHaveAttribute("src", /^data:image\/svg\+xml/);
+});

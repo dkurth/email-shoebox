@@ -33,6 +33,7 @@ import { SearchHelp } from "./SearchHelp.tsx";
 import { HighlightContext } from "./highlight.tsx";
 import { AdminPage } from "./AdminPage.tsx";
 import { AttachmentActionsContext } from "./attachmentActions.ts";
+import { DeleteThreadAttachments, ThreadMenu, threadAttachments } from "./ThreadMenu.tsx";
 import type { AttachmentInfo } from "../shared/types.ts";
 import { anyTooBigToSendOnUnload, flushAllOnUnload, onNoteSaved } from "./noteSaver.ts";
 
@@ -78,6 +79,8 @@ export function App() {
   const [dark, toggleDark] = useTheme();
   const [noteOpen, setNoteOpen] = useState(() => loadFlag("noteOpen"));
   const [searchHelp, setSearchHelp] = useState(false);
+  const [threadMenu, setThreadMenu] = useState<DOMRect | null>(null);
+  const [deleteThreadAtts, setDeleteThreadAtts] = useState(false);
   const searchInput = useRef<HTMLInputElement>(null);
 
   const readOnly = session?.readOnly ?? true;
@@ -432,7 +435,8 @@ export function App() {
           }),
   };
 
-  const dialogOpen = help || labelMenu || !!confirm || !!labelOptions || searchHelp;
+  const dialogOpen = help || labelMenu || !!confirm || !!labelOptions || searchHelp || !!threadMenu || deleteThreadAtts;
+  const deletable = thread ? threadAttachments(thread) : null;
   const goKeys = {
     "g i": () => go({ view: "inbox" }),
     "g s": () => go({ view: "starred" }),
@@ -531,6 +535,11 @@ export function App() {
               </span>
             )}
             <span className="spacer" />
+            {route.threadId && !readOnly && deletable && deletable.files.length + deletable.inText.length > 0 && (
+              <button className="icon-button" aria-label="More" title="More" aria-haspopup="menu" aria-expanded={!!threadMenu} onClick={(e) => setThreadMenu(e.currentTarget.getBoundingClientRect())}>
+                ⋮
+              </button>
+            )}
             {route.threadId && noteSaver && <NoteButton saver={noteSaver} open={noteOpen} onToggle={toggleNote} />}
             {list && !route.threadId && (
               <span className="pager">
@@ -631,6 +640,33 @@ export function App() {
           />
         )}
         {confirm && <ConfirmDialog data={confirm} onCancel={() => setConfirm(null)} />}
+        {threadMenu && (
+          <ThreadMenu
+            anchor={threadMenu}
+            canDelete={!!deletable && deletable.files.length + deletable.inText.length > 0}
+            onClose={() => setThreadMenu(null)}
+            onDeleteAll={() => {
+              setThreadMenu(null);
+              setDeleteThreadAtts(true);
+            }}
+          />
+        )}
+        {deleteThreadAtts && thread && (
+          <DeleteThreadAttachments
+            thread={thread}
+            onCancel={() => setDeleteThreadAtts(false)}
+            onConfirm={async (ids, bytes) => {
+              setDeleteThreadAtts(false);
+              try {
+                const r = await post<{ deleted: number; fileErrors: string[] }>("/api/attachments/delete", { ids, confirmCount: ids.length, confirmBytes: bytes });
+                setThreadVersion((v) => v + 1);
+                showToast(`${r.deleted === 1 ? "1 attachment" : `${r.deleted} attachments`} deleted.${r.fileErrors.length ? " Some files could not be removed; see the server log." : ""}`);
+              } catch (e) {
+                setError((e as Error).message);
+              }
+            }}
+          />
+        )}
         {toast && <Toast toast={toast} onClose={() => setToast(null)} />}
       </div>
     </ChosenColorsContext.Provider>
