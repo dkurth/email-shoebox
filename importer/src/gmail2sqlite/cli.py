@@ -20,6 +20,7 @@ def _cmd_import(args: argparse.Namespace) -> int:
         out_dir=Path(args.out),
         limit=args.limit,
         skip_spam_trash=args.skip_spam_trash,
+        overwrite_local_labels=args.overwrite_local_labels,
         quiet=args.quiet,
     )
     try:
@@ -36,6 +37,7 @@ def _cmd_import(args: argparse.Namespace) -> int:
             f"{c['seen']:,} messages read in {result.seconds:.1f}s: {c['inserted']:,} new, "
             f"{c['labels_changed']:,} with changed labels, {c['unchanged']:,} unchanged, "
             f"{c['skipped']:,} skipped (spam/trash), {c['errors']:,} with parse errors.\n"
+            f"{c['kept_local']:,} kept labels edited locally, {c['deleted_skipped']:,} skipped as deleted.\n"
             f"Output: {Path(args.out) / db.DB_FILENAME}"
         )
     return 0
@@ -94,6 +96,11 @@ def build_parser() -> argparse.ArgumentParser:
     imp.add_argument("--out", default=DEFAULT_OUT, help=f"output folder for mail.db and attachments/ (default {DEFAULT_OUT})")
     imp.add_argument("--limit", type=int, help="stop after reading N messages (for trying it out)")
     imp.add_argument("--skip-spam-trash", action="store_true", help="don't import new messages labeled Spam or Trash")
+    imp.add_argument(
+        "--overwrite-local-labels",
+        action="store_true",
+        help="replace labels edited in a viewer with the labels from this export",
+    )
     imp.add_argument("--quiet", action="store_true", help="no progress line or summary")
     imp.set_defaults(func=_cmd_import)
 

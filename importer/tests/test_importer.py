@@ -120,7 +120,7 @@ def test_labels_threads_and_fts(archive):
 def test_reimport_is_idempotent_and_updates_labels(archive, tmp_path):
     out, _, paths = archive
     res = run_import([str(paths["mbox"])], ImportOptions(out_dir=out, quiet=True))
-    assert res.counts == dict(seen=3, inserted=0, labels_changed=0, unchanged=3, skipped=0, errors=0)
+    assert res.counts == dict(seen=3, inserted=0, labels_changed=0, unchanged=3, skipped=0, errors=0, kept_local=0, deleted_skipped=0)
 
     # A newer export: message 2 was read and starred.
     newer = write_inputs(tmp_path / "newer", _mailbox(labels_for_2="Inbox,Starred"))
@@ -182,7 +182,7 @@ def test_per_label_mbox_folder(tmp_path):
     (mail / "Starred.mbox").write_bytes(mbox_bytes([("1", shared)]))
     out = tmp_path / "out"
     res = run_import([str(tmp_path / "Takeout")], ImportOptions(out_dir=out, quiet=True))
-    assert res.counts == dict(seen=3, inserted=2, labels_changed=0, unchanged=1, skipped=0, errors=0)
+    assert res.counts == dict(seen=3, inserted=2, labels_changed=0, unchanged=1, skipped=0, errors=0, kept_local=0, deleted_skipped=0)
     conn = _db(out)
     assert conn.execute("SELECT count(*) FROM messages").fetchone()[0] == 2
     t = conn.execute("SELECT * FROM threads WHERE thread_id = '77'").fetchone()

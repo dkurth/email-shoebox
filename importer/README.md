@@ -60,6 +60,9 @@ Already-imported messages aren't re-parsed; only their labels are refreshed. So:
 - To update the archive, import a newer Takeout export into the same `--out`. New
   messages are added and label changes (read, starred, moved) are applied. Messages
   you've since deleted from Gmail stay in the archive.
+- Changes made in a viewer are kept: messages you deleted there aren't re-imported,
+  and labels you edited there aren't overwritten (use `--overwrite-local-labels`
+  to let the export win).
 
 Messages that can't be fully decoded are still stored, with whatever could be
 read, and with a note in `messages.parse_error`. `stats` shows how many there are.

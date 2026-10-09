@@ -1,4 +1,4 @@
-# Archive format (schema version 1)
+# Archive format (schema version 2)
 
 This is the contract between `gmail2sqlite` and anything that reads its output,
 such as the web interface. The output folder is self-contained and can be moved
@@ -27,7 +27,7 @@ All paths stored in the database are relative to this folder and use `/`.
 |---|---|---|
 | `id` | INTEGER PK | internal row ID; used as the foreign key everywhere and as `messages_fts.rowid` |
 | `gmail_id` | TEXT UNIQUE | Gmail's message ID (decimal string, from the mbox `From ` line). For non-Takeout mboxes: `sha256-<hex of the raw message>` |
-| `thread_id` | TEXT | Gmail thread ID (`X-GM-THRID`); `NULL` outside Takeout |
+| `thread_id` | TEXT | Gmail thread ID (`X-GM-THRID`). Never `NULL`: when the header is missing it is the message's own `gmail_id` (Gmail's thread ID is its first message's ID) |
 | `message_id` | TEXT | `Message-ID` header, with `<>`. May be missing or duplicated; don't use it as a key |
 | `in_reply_to`, `references_hdr` | TEXT | raw header values |
 | `subject` | TEXT | decoded |
@@ -45,6 +45,7 @@ All paths stored in the database are relative to this folder and use `/`.
 | `is_unread`, `is_starred`, `is_important` | INTEGER | from the `Unread`, `Starred`, `Important` labels, kept in sync with `message_labels` |
 | `parse_error` | TEXT | `NULL` normally. Otherwise, newline-separated notes about what couldn't be decoded; the row still has everything that could be |
 | `import_id` | INTEGER | the `imports` row that first stored this message |
+| `labels_edited_at` | INTEGER | set by a viewer when it changes this message's labels; imports then keep those labels (see below) |
 
 Indexes: `thread_id`, `received_utc`, `date_utc`, `from_addr`, `message_id`.
 
@@ -53,7 +54,7 @@ Indexes: `thread_id`, `received_utc`, `date_utc`, `from_addr`, `message_id`.
 - `labels(id, name)`: names exactly as in `X-Gmail-Labels`. Nested labels keep their `Parent/Child` form. System labels include `Inbox`, `Sent`, `Drafts`, `Spam`, `Trash`, `Archived`, `Unread`, `Opened`, `Starred`, `Important`, `Chat` and `Category Personal`/`Promotions`/`Social`/`Updates`/`Forums`.
 - `message_labels(message_id, label_id)`: primary key `(message_id, label_id)`, plus an index on `(label_id, message_id)`.
 
-On re-import, a message's label set is **replaced** with the one in the newer export.
+On re-import, a message's label set is **replaced** with the one in the newer export, unless `labels_edited_at` is set, in which case the local labels are kept. `gmail2sqlite import --overwrite-local-labels` makes the export win and clears `labels_edited_at`.
 
 ## `attachments`: one row per non-body MIME part
 
@@ -93,8 +94,9 @@ FTS5 table with columns `subject`, `people` (names and addresses from From/To/Cc
 `body` (plain text, or text extracted from HTML when there's no plain part;
 capped at 500,000 characters) and `attachment_names`. `rowid = messages.id`.
 
-It's **contentless** (`content=''`): it stores only the index, not a second
-copy of the text. So you can `MATCH` and use `rank`/`bm25()`, but
+It's **contentless** (`content=''`, `contentless_delete=1`): it stores only the
+index, not a second copy of the text. Rows can be deleted with
+`DELETE FROM messages_fts WHERE rowid = ?` (needs SQLite 3.43+). So you can `MATCH` and use `rank`/`bm25()`, but
 `snippet()`/`highlight()` return nothing; highlight in the UI instead.
 
 ```sql
@@ -111,7 +113,35 @@ Readable summary for Datasette and ad-hoc SQL: `id`, `received` (ISO datetime
 text), `from_name`, `from_addr`, `subject`, `snippet`, `labels` (comma-joined),
 `has_attachments`, `is_unread`, `is_starred`, `thread_id`.
 
+## `deleted_messages`
+
+`gmail_id` PK, `deleted_at`. Messages deleted on purpose (e.g. "Empty Trash" in a
+viewer). Imports skip these IDs, so deleted mail doesn't come back.
+
 ## `imports` and `meta`
 
-- `imports`: one row per run, with `started_at`, `finished_at`, `status` (`running`/`finished`/`interrupted`/`failed`), `sources_json`, `tool_version` and counters (`messages_seen`, `inserted`, `labels_changed`, `unchanged`, `skipped`, `errors`).
-- `meta(key, value)`: `schema_version`, `tool_version`, `last_import_at`.
+- `imports`: one row per run, with `started_at`, `finished_at`, `status` (`running`/`finished`/`interrupted`/`failed`), `sources_json`, `tool_version` and counters (`messages_seen`, `inserted`, `labels_changed`, `unchanged`, `skipped`, `errors`, `kept_local`, `deleted_skipped`).
+- `meta(key, value)`: `schema_version`, `tool_version`, `last_import_at`. Viewers may add their own keys (e.g. `account_addresses`, a JSON array of the owner's addresses).
+
+## Rules for writers (e.g. a viewer)
+
+`gmail2sqlite` and a viewer both write to `mail.db`. Anything other than
+`gmail2sqlite` that changes data must follow these rules so that later imports
+behave:
+
+1. **Connection settings:** `PRAGMA foreign_keys = ON` (per connection; needed for
+   the `ON DELETE CASCADE`s) and a `busy_timeout` of a few seconds (an import may
+   be running). The database is in WAL mode.
+2. **Changing labels** of a message: update `message_labels`, keep
+   `is_unread` / `is_starred` / `is_important` equal to whether the message has
+   `Unread` / `Starred` / `Important`, and set `labels_edited_at` to the current time.
+3. **Takeout pseudo-labels** come in pairs; keep them consistent:
+   `Unread` ⟷ `Opened` (exactly one of the two) and `Inbox` ⟷ `Archived`
+   (removing `Inbox` adds `Archived` and vice versa).
+4. **Deleting a message:** in one transaction, insert its `gmail_id` into
+   `deleted_messages`, `DELETE FROM messages_fts WHERE rowid = id`, and delete the
+   `messages` row (labels and attachment rows cascade). After committing, delete its
+   folder `attachments/{bucket}/{gmail_id}/`.
+5. **`threads`** is derived. After changing labels or deleting messages, recompute
+   the affected rows (delete the row if the thread has no messages left), using the
+   same definitions as above.

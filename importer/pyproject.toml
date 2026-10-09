@@ -1,6 +1,6 @@
 [project]
 name = "gmail2sqlite"
-version = "0.1.0"
+version = "0.2.0"
 description = "Convert a Gmail Takeout mbox export into a SQLite database plus a folder of attachments"
 readme = "README.md"
 requires-python = ">=3.11"

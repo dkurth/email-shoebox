@@ -24,13 +24,16 @@ class ImportOptions:
     out_dir: Path
     limit: int | None = None
     skip_spam_trash: bool = False
+    overwrite_local_labels: bool = False
     quiet: bool = False
 
 
 @dataclass
 class ImportResult:
     counts: dict[str, int] = field(
-        default_factory=lambda: dict(seen=0, inserted=0, labels_changed=0, unchanged=0, skipped=0, errors=0)
+        default_factory=lambda: dict(
+            seen=0, inserted=0, labels_changed=0, unchanged=0, skipped=0, errors=0, kept_local=0, deleted_skipped=0
+        )
     )
     status: str = "running"
     seconds: float = 0.0
@@ -97,7 +100,7 @@ def _insert_new(w: db.Writer, out_dir: Path, raw: RawMessage, import_id: int) ->
     mid = w.insert_message(
         dict(
             gmail_id=raw.gmail_id,
-            thread_id=pm.thread_id,
+            thread_id=pm.thread_id or raw.gmail_id,  # Gmail's thread ID is its first message's ID
             message_id=pm.message_id,
             in_reply_to=pm.in_reply_to,
             references_hdr=pm.references,
@@ -140,14 +143,14 @@ def _insert_new(w: db.Writer, out_dir: Path, raw: RawMessage, import_id: int) ->
         )
     w.set_labels(mid, pm.labels)
 
-    people = []
-    if pm.from_:
-        people.append(f"{pm.from_.name} {pm.from_.addr}")
-    people += [f"{a.name} {a.addr}" for a in (*pm.to, *pm.cc, *pm.bcc)]
     w.insert_fts(
         mid,
         pm.subject or "",
-        " ".join(people),
+        db.fts_people(
+            pm.from_.name if pm.from_ else None,
+            pm.from_.addr if pm.from_ else None,
+            [(a.name, a.addr) for a in (*pm.to, *pm.cc, *pm.bcc)],
+        ),
         pm.search_text,
         " ".join(p.filename for p in pm.attachments if p.filename),
     )
@@ -165,6 +168,7 @@ def run_import(paths: list[str], opts: ImportOptions) -> ImportResult:
     reporter = _Reporter(progress, counts, enabled=not opts.quiet and sys.stderr.isatty())
     started = time.monotonic()
     in_batch = 0
+    deleted = w.deleted_ids()
 
     try:
         w.begin()
@@ -174,10 +178,16 @@ def run_import(paths: list[str], opts: ImportOptions) -> ImportResult:
                     break
                 counts["seen"] += 1
 
-                existing = w.find_message(raw.gmail_id)
-                if existing is not None:
+                existing = w.find_message(raw.gmail_id) if raw.gmail_id not in deleted else None
+                if raw.gmail_id in deleted:
+                    counts["deleted_skipped"] += 1  # deleted on purpose; don't bring it back
+                elif existing is not None and existing["labels_edited_at"] and not opts.overwrite_local_labels:
+                    counts["kept_local"] += 1  # labels edited in a viewer win
+                elif existing is not None:
                     # Fast path: don't parse the body; just refresh labels.
-                    if w.set_labels(existing, labels_from_raw(raw.data)):
+                    if existing["labels_edited_at"]:
+                        w.clear_local_edit(existing["id"])
+                    if w.set_labels(existing["id"], labels_from_raw(raw.data)):
                         counts["labels_changed"] += 1
                     else:
                         counts["unchanged"] += 1

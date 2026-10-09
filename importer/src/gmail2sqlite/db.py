@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import sys
 import time
 from pathlib import Path
 
 from . import __version__
+from .parse import SEARCH_TEXT_MAX_CHARS, html_to_text
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 DB_FILENAME = "mail.db"
 
 SCHEMA = """
@@ -30,7 +32,15 @@ CREATE TABLE IF NOT EXISTS imports (
   labels_changed INTEGER NOT NULL DEFAULT 0,
   unchanged      INTEGER NOT NULL DEFAULT 0,
   skipped        INTEGER NOT NULL DEFAULT 0,
-  errors         INTEGER NOT NULL DEFAULT 0
+  errors         INTEGER NOT NULL DEFAULT 0,
+  kept_local     INTEGER NOT NULL DEFAULT 0,
+  deleted_skipped INTEGER NOT NULL DEFAULT 0
+);
+
+-- Messages deleted on purpose (e.g. "Empty Trash" in a viewer). Imports skip these IDs.
+CREATE TABLE IF NOT EXISTS deleted_messages (
+  gmail_id   TEXT PRIMARY KEY,
+  deleted_at INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -60,7 +70,8 @@ CREATE TABLE IF NOT EXISTS messages (
   is_starred      INTEGER NOT NULL DEFAULT 0,
   is_important    INTEGER NOT NULL DEFAULT 0,
   parse_error     TEXT,
-  import_id       INTEGER REFERENCES imports(id)
+  import_id       INTEGER REFERENCES imports(id),
+  labels_edited_at INTEGER   -- set by a viewer when it changes labels; imports then keep them
 );
 CREATE INDEX IF NOT EXISTS messages_thread   ON messages(thread_id);
 CREATE INDEX IF NOT EXISTS messages_received ON messages(received_utc);
@@ -111,6 +122,7 @@ CREATE INDEX IF NOT EXISTS threads_last_date ON threads(last_date);
 CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
   subject, people, body, attachment_names,
   content = '',
+  contentless_delete = 1,
   tokenize = 'unicode61 remove_diacritics 2'
 );
 
@@ -162,8 +174,21 @@ def _migrate(conn: sqlite3.Connection) -> None:
     cols = {r[1] for r in conn.execute("PRAGMA table_info(threads)")}
     if cols and "labels_json" not in cols:
         conn.execute("DROP TABLE threads")
+    rebuild_fts = False
+    if version == 1:
+        print("Upgrading database to schema version 2 (rebuilding the search index)...", file=sys.stderr)
+        conn.execute("BEGIN")
+        # v1's contentless index can't delete rows; v2 adds contentless_delete=1.
+        conn.execute("DROP TABLE IF EXISTS messages_fts")
+        conn.execute("ALTER TABLE messages ADD COLUMN labels_edited_at INTEGER")
+        conn.execute("ALTER TABLE imports ADD COLUMN kept_local INTEGER NOT NULL DEFAULT 0")
+        conn.execute("ALTER TABLE imports ADD COLUMN deleted_skipped INTEGER NOT NULL DEFAULT 0")
+        conn.execute("UPDATE messages SET thread_id = gmail_id WHERE thread_id IS NULL")
+        conn.execute("COMMIT")
+        rebuild_fts = True
     conn.executescript("BEGIN;" + SCHEMA + "COMMIT;")
-    # Future migrations go here: if version == 1: ...
+    if rebuild_fts:
+        rebuild_fts_index(conn)
     set_meta(conn, "schema_version", str(SCHEMA_VERSION))
     set_meta(conn, "tool_version", __version__)
 
@@ -208,7 +233,7 @@ class Writer:
     def update_import(self, import_id: int, status: str, counts: dict[str, int], finished: bool) -> None:
         self.conn.execute(
             """UPDATE imports SET status=?, finished_at=?, messages_seen=?, inserted=?, labels_changed=?,
-                   unchanged=?, skipped=?, errors=? WHERE id=?""",
+                   unchanged=?, skipped=?, errors=?, kept_local=?, deleted_skipped=? WHERE id=?""",
             (
                 status,
                 int(time.time()) if finished else None,
@@ -218,14 +243,22 @@ class Writer:
                 counts["unchanged"],
                 counts["skipped"],
                 counts["errors"],
+                counts["kept_local"],
+                counts["deleted_skipped"],
                 import_id,
             ),
         )
 
     # -- messages
-    def find_message(self, gmail_id: str) -> int | None:
-        row = self.conn.execute("SELECT id FROM messages WHERE gmail_id = ?", (gmail_id,)).fetchone()
-        return row[0] if row else None
+    def find_message(self, gmail_id: str) -> sqlite3.Row | None:
+        """Return (id, labels_edited_at) for a stored message, or None."""
+        return self.conn.execute("SELECT id, labels_edited_at FROM messages WHERE gmail_id = ?", (gmail_id,)).fetchone()
+
+    def deleted_ids(self) -> set[str]:
+        return {r[0] for r in self.conn.execute("SELECT gmail_id FROM deleted_messages")}
+
+    def clear_local_edit(self, message_id: int) -> None:
+        self.conn.execute("UPDATE messages SET labels_edited_at = NULL WHERE id = ?", (message_id,))
 
     def insert_message(self, row: dict) -> int:
         cols = ", ".join(row)
@@ -301,3 +334,40 @@ def to_json(addresses) -> str | None:
     if not addresses:
         return None
     return json.dumps([a.as_dict() for a in addresses], ensure_ascii=False)
+
+
+def fts_people(from_name: str | None, from_addr: str | None, recipients: list[tuple[str, str]]) -> str:
+    """The `people` column of messages_fts: names and addresses from From/To/Cc/Bcc."""
+    parts = []
+    if from_name or from_addr:
+        parts.append(f"{from_name or ''} {from_addr or ''}".strip())
+    parts += [f"{n} {a}".strip() for n, a in recipients]
+    return " ".join(parts)
+
+
+def fts_body(body_text: str | None, body_html: str | None) -> str:
+    """The `body` column of messages_fts: plain text, or text extracted from HTML."""
+    plain = body_text or (html_to_text(body_html) if body_html else "")
+    return plain[:SEARCH_TEXT_MAX_CHARS]
+
+
+def rebuild_fts_index(conn: sqlite3.Connection) -> None:
+    """Refill messages_fts from the messages and attachments tables (no mbox needed)."""
+    conn.execute("BEGIN")
+    conn.execute("DELETE FROM messages_fts")
+    names: dict[int, list[str]] = {}
+    for mid, fn in conn.execute("SELECT message_id, filename FROM attachments WHERE filename IS NOT NULL ORDER BY message_id, part_index"):
+        names.setdefault(mid, []).append(fn)
+    rows = conn.execute(
+        "SELECT id, subject, from_name, from_addr, to_json, cc_json, bcc_json, body_text, body_html FROM messages"
+    )
+    insert = "INSERT INTO messages_fts(rowid, subject, people, body, attachment_names) VALUES (?, ?, ?, ?, ?)"
+    for r in rows:
+        recipients = []
+        for col in (r[4], r[5], r[6]):
+            recipients += [(a.get("name", ""), a.get("addr", "")) for a in json.loads(col or "[]")]
+        conn.execute(
+            insert,
+            (r[0], r[1] or "", fts_people(r[2], r[3], recipients), fts_body(r[7], r[8]), " ".join(names.get(r[0], []))),
+        )
+    conn.execute("COMMIT")
