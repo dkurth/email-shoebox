@@ -429,3 +429,28 @@ test("admin: opens from the top bar and with g z; tabs; a top sender runs a sear
   await page.locator(".admin-table a", { hasText: "Travel/2024" }).click();
   await expect(page).toHaveURL(/#\/label\/Travel%2F2024$/);
 });
+
+test("admin People: tables, group by domain, a person's page, a mailing list", async ({ page }) => {
+  server = await startServer();
+  await page.goto(server.url + "#/admin/people");
+  const received = page.locator(".people-table", { hasText: "People I received from" });
+  await expect(received.locator("tbody tr").first()).toContainText("news@shop.example");
+  await received.getByRole("textbox").fill("chen");
+  await expect(received.locator("tbody tr")).toHaveCount(1);
+  await received.locator("a", { hasText: "Carol Chen" }).click();
+  await expect(page).toHaveURL(/#\/admin\/person\?addr=carol%40example\.com$/);
+  await expect(page.locator(".person-page h1")).toHaveText("Carol Chen");
+  await expect(page.getByRole("tab", { name: "People" })).toHaveAttribute("aria-selected", "true");
+  await page.getByRole("button", { name: "Mail you sent them" }).click();
+  await expect(subjects(page)).toHaveText(["Question about the invoice"]);
+
+  await page.goto(server.url + "#/admin/people");
+  await page.getByLabel("Group by domain").click(); // the URL changes, then the box shows the change
+  await expect(page.getByLabel("Group by domain")).toBeChecked();
+  await expect(page).toHaveURL(/domain=1/);
+  const rows = page.locator(".people-table", { hasText: "People I received from" }).locator("tbody tr");
+  await expect(rows.first()).toContainText("@shop.example");
+  await expect(rows.filter({ hasText: "@example.com" })).toContainText("3 addresses");
+  await page.locator("section", { hasText: "Mailing lists" }).locator("a", { hasText: "Hike Club Announcements" }).click();
+  await expect(subjects(page)).toHaveText(["Trail report", "Saturday hike"]);
+});

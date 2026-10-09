@@ -12,7 +12,7 @@ import { listThreads, original, sidebar, threadDetail } from "./views.ts";
 import { searchThreads } from "./search.ts";
 import { isSearchView, searchQuery } from "../shared/labels.ts";
 import { NoteConflict, NotFound, saveNote } from "./notes.ts";
-import { imports, labels as adminLabels, overview } from "./admin.ts";
+import { imports, labels as adminLabels, lists, overview, people, person } from "./admin.ts";
 import { collectNotes, exportFilename, toCsv, toMarkdown } from "./exportNotes.ts";
 
 export class BadRequest extends Error {}
@@ -94,6 +94,34 @@ export function createApp(opts: AppOptions): Hono {
   app.get("/api/admin/overview", (c) => c.json(overview(archive, opts.me)));
   app.get("/api/admin/labels", (c) => c.json(adminLabels(db)));
   app.get("/api/admin/imports", (c) => c.json(imports(db)));
+  const flag = (v: string | undefined) => v === "1" || v === "true";
+  app.get("/api/admin/people", (c) => {
+    const dir = c.req.query("dir");
+    if (dir !== "sent" && dir !== "received") throw new BadRequest("dir must be sent or received");
+    const sort = c.req.query("sort") as "count" | "addr" | "name" | "last" | "attachmentBytes" | undefined;
+    if (sort && !["count", "addr", "name", "last", "attachmentBytes"].includes(sort)) throw new BadRequest(`bad sort: ${sort}`);
+    return c.json(
+      people(db, opts.me, {
+        dir,
+        q: c.req.query("q"),
+        sort,
+        desc: c.req.query("desc") !== "0",
+        page: intParam(c.req.query("page"), 1),
+        chats: flag(c.req.query("chats")),
+        byDomain: flag(c.req.query("domain")),
+      }),
+    );
+  });
+  app.get("/api/admin/lists", (c) => {
+    const sort = c.req.query("sort") as "messages" | "unread" | "first" | "last" | "bytes" | "name" | undefined;
+    if (sort && !["messages", "unread", "first", "last", "bytes", "name"].includes(sort)) throw new BadRequest(`bad sort: ${sort}`);
+    return c.json(lists(db, { q: c.req.query("q"), sort, desc: c.req.query("desc") !== "0", page: intParam(c.req.query("page"), 1) }));
+  });
+  app.get("/api/admin/person", (c) => {
+    const addr = c.req.query("addr");
+    if (!addr) throw new BadRequest("addr is required");
+    return c.json(person(db, addr));
+  });
 
   app.get("/api/admin/notes/export", (c) => {
     const format = c.req.query("format") ?? "md";

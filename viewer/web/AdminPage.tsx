@@ -5,6 +5,7 @@ import type { AdminImport, AdminLabel, AdminOverview, AdminPerson } from "../sha
 import { get } from "./api.ts";
 import { fullDate, size } from "./format.ts";
 import { go } from "./route.ts";
+import { PeopleTab, PersonPage } from "./AdminPeople.tsx";
 
 export interface AdminTab {
   id: string;
@@ -297,13 +298,17 @@ function Imports() {
 }
 
 // Tabs that later steps add register here (set to true when the tab exists).
-const PEOPLE_TAB = false;
+const PEOPLE_TAB = true;
 const MAINTENANCE_TAB = false;
 
 export const TABS: AdminTab[] = [
   { id: "overview", name: "Overview", render: (p) => <Overview {...p} /> },
+  { id: "people", name: "People", render: (p) => <PeopleTab {...p} /> },
   { id: "imports", name: "Imports", render: () => <Imports /> },
 ];
+
+// Pages under a tab, not shown as tabs themselves.
+const PAGES: (AdminTab & { under: string })[] = [{ id: "person", name: "Person", under: "people", render: (p) => <PersonPage {...p} /> }];
 
 /** "people?dir=sent&page=2" → tab "people" and its options. */
 export function parseAdminPath(path: string): { tab: string; params: URLSearchParams } {
@@ -313,7 +318,9 @@ export function parseAdminPath(path: string): { tab: string; params: URLSearchPa
 
 export function AdminPage({ path, me, readOnly }: { path: string; me: string[]; readOnly: boolean }) {
   const { tab, params } = parseAdminPath(path);
-  const current = TABS.find((t) => t.id === tab) ?? TABS[0];
+  const page = PAGES.find((p) => p.id === tab);
+  const current = page ?? TABS.find((t) => t.id === tab) ?? TABS[0];
+  const activeTab = page ? page.under : current.id;
   const setParams = (p: Record<string, string | number | boolean | null>) => {
     const next = new URLSearchParams(p.tab && p.tab !== current.id ? "" : params);
     let nextTab = current.id;
@@ -332,8 +339,8 @@ export function AdminPage({ path, me, readOnly }: { path: string; me: string[]; 
           <a
             key={t.id}
             role="tab"
-            aria-selected={t.id === current.id}
-            className={t.id === current.id ? "active" : undefined}
+            aria-selected={t.id === activeTab}
+            className={t.id === activeTab ? "active" : undefined}
             href={`#/admin${t.id === "overview" ? "" : `/${t.id}`}`}
           >
             {t.name}

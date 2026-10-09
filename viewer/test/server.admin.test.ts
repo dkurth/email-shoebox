@@ -55,3 +55,64 @@ describe("admin labels and imports", () => {
     expect(im[0].counts.inserted).toBe(ctx.db.prepare("SELECT count(*) FROM messages").pluck().get());
   });
 });
+
+describe("admin people", () => {
+  type People = { rows: import("../shared/types.ts").AdminPerson[]; total: number };
+  const people = async (ctx: ReturnType<typeof setup>, qs: string) => (await ctx.get(`/api/admin/people?${qs}`)).body as People;
+
+  it("lists people I sent to, with To/Cc/Bcc counts", async () => {
+    const ctx = setup();
+    const r = await people(ctx, "dir=sent");
+    expect(r.rows.map((p) => [p.addr, p.count])).toEqual([
+      ["alice@example.com", 2],
+      ["carol@example.com", 1],
+    ]);
+    expect(r.rows[0]).toMatchObject({ name: "Alice Adams", to: 2, cc: 0, bcc: 0 });
+    expect(r.rows[0].last).toBeGreaterThan(0);
+  });
+
+  it("lists people I received from, with attachments, without me or chats", async () => {
+    const ctx = setup();
+    const r = await people(ctx, "dir=received");
+    expect(r.total).toBe(7);
+    const carol = r.rows.find((p) => p.addr === "carol@example.com")!;
+    expect(carol).toMatchObject({ count: 3, name: "Carol Chen", attachments: 8 });
+    expect(r.rows.map((p) => p.addr)).not.toContain("dana@example.com");
+    expect((await people(ctx, "dir=received&chats=1")).rows.map((p) => p.addr)).toContain("dana@example.com");
+  });
+
+  it("filters, sorts, pages and groups by domain", async () => {
+    const ctx = setup();
+    expect((await people(ctx, "dir=received&q=CHEN")).rows.map((p) => p.addr)).toEqual(["carol@example.com"]);
+    expect((await people(ctx, "dir=received&q=%25")).rows).toEqual([]); // % is literal
+    const byName = await people(ctx, "dir=received&sort=addr&desc=0");
+    expect(byName.rows[0].addr).toBe("alice@example.com");
+    const byBytes = await people(ctx, "dir=received&sort=attachmentBytes");
+    expect(byBytes.rows[0].addr).toBe("carol@example.com");
+    const domains = await people(ctx, "dir=received&domain=1");
+    expect(domains.rows.find((p) => p.addr === "example.com")).toMatchObject({ addresses: 3, count: 11 });
+    expect((await people(ctx, "dir=received&page=2")).rows).toEqual([]);
+    expect((await ctx.get("/api/admin/people?dir=both")).status).toBe(400);
+    expect((await ctx.get("/api/admin/people?dir=sent&sort=evil")).status).toBe(400);
+  });
+
+  it("lists mailing lists", async () => {
+    const ctx = setup();
+    const r = (await ctx.get("/api/admin/lists")).body as { rows: import("../shared/types.ts").AdminList[]; total: number };
+    expect(r.total).toBe(1);
+    expect(r.rows[0]).toMatchObject({ listId: "announce.hikers.example", name: "Hike Club Announcements", messages: 2, unread: 1 });
+    expect(((await ctx.get("/api/admin/lists?q=nothing")).body as { total: number }).total).toBe(0);
+  });
+
+  it("describes one person", async () => {
+    const ctx = setup();
+    const p = (await ctx.get("/api/admin/person?addr=Carol@Example.com")).body as import("../shared/types.ts").AdminPersonDetail;
+    expect(p.addr).toBe("carol@example.com");
+    expect(p.names[0].name).toBe("Carol Chen");
+    expect(p.messages).toBe(4); // three from Carol, one to her
+    expect(p.years).toEqual([{ year: 2024, received: 3, sent: 1 }]);
+    expect(p.labels.map((l) => l.name)).toEqual(["Media", "Work/Projects"]);
+    expect(p.attachments[0]).toMatchObject({ filename: "voice-memo.mp3", subject: "Holiday media" }); // the biggest first
+    expect(p.attachments).toHaveLength(8);
+  });
+});

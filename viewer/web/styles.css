@@ -284,3 +284,17 @@ mark.hl { background: #fde293; color: inherit; border-radius: 2px; }
 .admin-table .mono { font: 12px ui-monospace, monospace; white-space: pre-wrap; }
 .sort-button { border: 0; background: none; padding: 0; cursor: pointer; color: inherit; font: inherit; }
 .sort-button:hover { color: var(--text); }
+.admin-options { display: flex; gap: 20px; font-size: 13px; color: var(--muted); }
+.admin-options label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+.people-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(560px, 1fr)); gap: 0 32px; }
+.table-filter { font: inherit; font-size: 13px; font-weight: 400; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); width: 200px; }
+.admin-body h2 .pager { margin-left: auto; font-weight: 400; }
+.muted-small { color: var(--muted); font-size: 12px; }
+.muted { color: var(--muted); }
+.row-actions { white-space: nowrap; }
+.row-actions > * + * { margin-left: 12px; }
+.person-page h1 { font-size: 24px; font-weight: 400; margin: 12px 0 2px; }
+.person-links { display: flex; gap: 8px; margin: 16px 0; flex-wrap: wrap; }
+.person-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 0 32px; }
+.back-link { font-size: 13px; }
+@media (max-width: 800px) { .people-grid { grid-template-columns: 1fr; } }

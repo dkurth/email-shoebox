@@ -183,3 +183,24 @@ export interface AdminImport {
   toolVersion: string | null;
   counts: { seen: number; inserted: number; labelsChanged: number; unchanged: number; skipped: number; errors: number; keptLocal: number; deletedSkipped: number };
 }
+
+export interface AdminList {
+  listId: string;
+  name: string | null; // the name used most often
+  messages: number;
+  unread: number;
+  first: number | null;
+  last: number | null;
+  bytes: number;
+}
+
+export interface AdminPersonDetail {
+  addr: string;
+  names: { name: string; n: number }[];
+  first: number | null;
+  last: number | null;
+  messages: number;
+  years: { year: number; received: number; sent: number }[];
+  labels: { name: string; n: number }[]; // user labels on their mail, top 10
+  attachments: { id: number; filename: string | null; size: number; contentType: string | null; threadId: string; date: number | null; subject: string | null }[];
+}

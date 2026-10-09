@@ -2,7 +2,8 @@
 // message row (each holds a full body).
 import fs from "node:fs";
 import path from "node:path";
-import type { AdminImport, AdminLabel, AdminOverview, AdminPerson } from "../shared/types.ts";
+import { isUserLabel } from "../shared/labels.ts";
+import type { AdminImport, AdminLabel, AdminList, AdminOverview, AdminPerson, AdminPersonDetail } from "../shared/types.ts";
 import type { Archive, DB } from "./db.ts";
 import { labelId } from "./views.ts";
 
@@ -220,4 +221,105 @@ export function people(db: DB, me: string[], pq: PeopleQuery): { rows: AdminPers
     total = db.prepare(`SELECT count(DISTINCT ${key}) FROM message_addresses a WHERE ${where.join(" AND ")}`).pluck().get(...params) as number;
   }
   return { rows, total };
+}
+
+// ------------------------------------------------------------------ mailing lists
+
+export interface ListsQuery {
+  q?: string;
+  sort?: "messages" | "unread" | "first" | "last" | "bytes" | "name";
+  desc?: boolean;
+  page: number;
+}
+
+/** Messages per mailing list (List-Id). Reads only the list messages, through their partial index. */
+export function lists(db: DB, lq: ListsQuery): { rows: AdminList[]; total: number } {
+  const unread = labelId(db, "Unread") ?? -1;
+  const params: unknown[] = [unread];
+  let filter = "";
+  if (lq.q?.trim()) {
+    const like = `%${lq.q.trim().toLowerCase().replace(/[\\%_]/g, (c) => "\\" + c)}%`;
+    filter = "WHERE (list_id LIKE ? ESCAPE '\\' OR name LIKE ? ESCAPE '\\')";
+    params.push(like, like);
+  }
+  const sortCol = { messages: "n", unread: "unread", first: "first", last: "last", bytes: "bytes", name: "lower(coalesce(name, list_id))" }[lq.sort ?? "messages"] ?? "n";
+  const sql = `
+    WITH lm AS MATERIALIZED (
+      SELECT id, list_id, list_name, coalesce(received_utc, date_utc) AS d, size_bytes FROM messages INDEXED BY messages_list WHERE list_id IS NOT NULL),
+    names AS (SELECT list_id, list_name AS name FROM (
+      SELECT list_id, list_name, row_number() OVER (PARTITION BY list_id ORDER BY count(*) DESC, list_name) AS rn
+      FROM lm WHERE list_name IS NOT NULL GROUP BY list_id, list_name) WHERE rn = 1),
+    g AS (SELECT lm.list_id, count(*) AS n, min(d) AS first, max(d) AS last, sum(size_bytes) AS bytes,
+                 count(*) FILTER (WHERE lm.id IN (SELECT message_id FROM message_labels WHERE label_id = ?)) AS unread
+          FROM lm GROUP BY lm.list_id)
+    SELECT * FROM (SELECT g.*, names.name FROM g LEFT JOIN names ON names.list_id = g.list_id) ${filter}
+    ORDER BY ${sortCol} ${lq.desc === false ? "ASC" : "DESC"}, list_id LIMIT ? OFFSET ?`;
+  const all = db.prepare(sql.replace("SELECT * FROM (", "SELECT *, count(*) OVER () AS total FROM (")).all(...params, PEOPLE_PAGE, (lq.page - 1) * PEOPLE_PAGE) as Record<string, unknown>[];
+  return {
+    rows: all.map((r) => ({
+      listId: r.list_id as string,
+      name: (r.name as string | null) ?? null,
+      messages: r.n as number,
+      unread: r.unread as number,
+      first: (r.first as number | null) ?? null,
+      last: (r.last as number | null) ?? null,
+      bytes: r.bytes as number,
+    })),
+    total: (all[0]?.total as number | undefined) ?? 0,
+  };
+}
+
+// ------------------------------------------------------------------ one person
+
+export function person(db: DB, addr: string): AdminPersonDetail {
+  const a = addr.trim().toLowerCase();
+  const sent = labelId(db, "Sent") ?? -1;
+  const names = db
+    .prepare("SELECT name, count(*) AS n FROM message_addresses WHERE addr = ? AND name != '' GROUP BY name ORDER BY n DESC LIMIT 10")
+    .all(a) as { name: string; n: number }[];
+  // Each message with this address, its date (from the thread index) and whether it was received or sent.
+  const rows = db
+    .prepare(
+      `WITH mine AS MATERIALIZED (SELECT DISTINCT message_id FROM message_addresses WHERE addr = ?),
+       received AS MATERIALIZED (SELECT DISTINCT message_id FROM message_addresses WHERE addr = ? AND role = 'from'),
+       sentTo AS MATERIALIZED (SELECT DISTINCT message_id FROM message_addresses WHERE addr = ? AND role IN ('to', 'cc', 'bcc')
+                               AND message_id IN (SELECT message_id FROM message_labels WHERE label_id = ?))
+       SELECT strftime('%Y', coalesce(m.received_utc, m.date_utc), 'unixepoch', 'localtime') AS year,
+              count(*) FILTER (WHERE m.id IN received) AS received,
+              count(*) FILTER (WHERE m.id IN sentTo) AS sent,
+              count(*) AS total, min(coalesce(m.received_utc, m.date_utc)) AS first, max(coalesce(m.received_utc, m.date_utc)) AS last
+       FROM messages m INDEXED BY messages_thread_date WHERE m.id IN mine GROUP BY year ORDER BY year`,
+    )
+    .all(a, a, a, sent) as { year: string | null; received: number; sent: number; total: number; first: number | null; last: number | null }[];
+  const labels = (
+    db
+      .prepare(
+        `SELECT l.name, count(*) AS n FROM message_labels ml JOIN labels l ON l.id = ml.label_id
+         WHERE ml.message_id IN (SELECT message_id FROM message_addresses WHERE addr = ?) GROUP BY l.id ORDER BY n DESC, l.name`,
+      )
+      .all(a) as { name: string; n: number }[]
+  )
+    .filter((l) => isUserLabel(l.name))
+    .slice(0, 10);
+  const attachments = db
+    .prepare(
+      `SELECT x.id, x.filename, x.size_bytes AS size, x.content_type AS contentType, m.thread_id AS threadId,
+              coalesce(m.received_utc, m.date_utc) AS date, m.subject
+       FROM attachments x JOIN messages m ON m.id = x.message_id
+       WHERE x.message_id IN (SELECT message_id FROM message_addresses WHERE addr = ? AND role = 'from')
+         AND x.is_inline = 0 AND x.deleted_at IS NULL
+       ORDER BY x.size_bytes DESC LIMIT 10`,
+    )
+    .all(a) as AdminPersonDetail["attachments"];
+  const dated = rows.filter((r) => r.first !== null);
+  return {
+    addr: a,
+    names,
+    first: dated.length ? Math.min(...dated.map((r) => r.first!)) : null,
+    last: dated.length ? Math.max(...dated.map((r) => r.last!)) : null,
+    messages: rows.reduce((s, r) => s + r.total, 0),
+    years: rows.filter((r) => r.year).map((r) => ({ year: Number(r.year), received: r.received, sent: r.sent })),
+    labels,
+    attachments,
+  };
 }
