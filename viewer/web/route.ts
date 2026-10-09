@@ -1,6 +1,6 @@
 // URL hash <-> route. Examples: #/inbox  #/inbox/p2  #/label/Work%2FProjects/t/1790000000000000001
 export interface Route {
-  view: string; // folder id or "label:<name>"
+  view: string; // folder id, "label:<name>" or "search:<query>"
   page: number;
   threadId: string | null;
 }
@@ -10,6 +10,9 @@ export function parseHash(hash: string): Route {
   let view = "inbox";
   if (parts[0] === "label" && parts[1]) {
     view = "label:" + decodeURIComponent(parts[1]);
+    parts.splice(0, 2);
+  } else if (parts[0] === "search" && parts[1]) {
+    view = "search:" + decodeURIComponent(parts[1]);
     parts.splice(0, 2);
   } else if (parts[0]) {
     view = parts.shift()!;
@@ -21,7 +24,11 @@ export function parseHash(hash: string): Route {
 }
 
 export function toHash(r: Partial<Route> & { view: string }): string {
-  const v = r.view.startsWith("label:") ? `label/${encodeURIComponent(r.view.slice(6))}` : r.view;
+  const v = r.view.startsWith("label:")
+    ? `label/${encodeURIComponent(r.view.slice(6))}`
+    : r.view.startsWith("search:")
+      ? `search/${encodeURIComponent(r.view.slice(7))}`
+      : r.view;
   return `#/${v}${r.page && r.page > 1 ? `/p${r.page}` : ""}${r.threadId ? `/t/${encodeURIComponent(r.threadId)}` : ""}`;
 }
 

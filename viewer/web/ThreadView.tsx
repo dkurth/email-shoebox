@@ -5,6 +5,8 @@ import type { Address, AttachmentInfo, MessageDetail, ThreadDetail } from "../sh
 import { EmailBody } from "./EmailBody.tsx";
 import { displayName, fullDate, recipientsLine, relative, size } from "./format.ts";
 import { Lightbox } from "./Lightbox.tsx";
+import { Hl, useHighlight } from "./highlight.tsx";
+import { findMatches } from "../shared/search.ts";
 import { Chip } from "./ThreadList.tsx";
 
 function AddressList({ list, me }: { list: Address[]; me: string[] }) {
@@ -177,7 +179,7 @@ function MessageCard({ m, me, expanded, onToggle }: { m: MessageDetail; me: stri
     return (
       <article className={`msg collapsed${m.unread ? " unread" : ""}`} onClick={onToggle}>
         <span className="msg-from">{sender}</span>
-        <span className="msg-snippet">{m.snippet}</span>
+        <span className="msg-snippet"><Hl text={m.snippet} /></span>
         <span className="msg-date">{fullDate(m.date)}</span>
       </article>
     );
@@ -227,13 +229,20 @@ export function ThreadView({ thread, me, view, onToggleStar }: {
   const shown = thread.messages.filter((m) => m.inContext || showHidden);
   const hidden = thread.messages.filter((m) => !m.inContext).length;
 
-  // Gmail expands unread messages and the last one; the rest are one-line summaries.
+  // Gmail expands unread messages, the last one, and (in search results) the ones that match;
+  // the rest are one-line summaries.
+  const terms = useHighlight();
   const initial = useMemo(() => {
     const visible = thread.messages.filter((m) => m.inContext);
     const s = new Set(visible.filter((m) => m.unread).map((m) => m.id));
     if (visible.length) s.add(visible[visible.length - 1].id);
+    if (terms.length) {
+      for (const m of visible) {
+        if (findMatches(`${m.subject}\n${m.bodyText ?? m.bodyHtml ?? ""}`, terms).length) s.add(m.id);
+      }
+    }
     return s;
-  }, [thread]);
+  }, [thread, terms]);
   const [expanded, setExpanded] = useState(initial);
   useEffect(() => setExpanded(initial), [initial]);
 
@@ -248,7 +257,7 @@ export function ThreadView({ thread, me, view, onToggleStar }: {
   return (
     <div className="thread-view">
       <div className="thread-title">
-        <h1>{thread.subject || "(no subject)"}</h1>
+        <h1>{thread.subject ? <Hl text={thread.subject} /> : "(no subject)"}</h1>
         <button
           className={`star${starred ? " on" : ""}`}
           aria-label={starred ? "Starred" : "Not starred"}

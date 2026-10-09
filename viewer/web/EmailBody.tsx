@@ -4,6 +4,7 @@
 import DOMPurify from "dompurify";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AttachmentInfo } from "../shared/types.ts";
+import { highlightDom, highlightText, useHighlight } from "./highlight.tsx";
 
 const REMOTE = /^(https?:)?\/\//i;
 
@@ -52,7 +53,7 @@ export function prepareHtml(raw: string, attachments: AttachmentInfo[], showImag
     "style-src 'unsafe-inline'",
     `font-src data:${showImages ? " https:" : ""}`,
   ].join("; ");
-  const head = `<meta http-equiv="Content-Security-Policy" content="${csp}"><style>body{margin:0;padding:12px 16px;font:14px Arial,Helvetica,sans-serif;color:#222;background:#fff;overflow-wrap:anywhere}img{max-width:100%;height:auto}</style>`;
+  const head = `<meta http-equiv="Content-Security-Policy" content="${csp}"><style>body{margin:0;padding:12px 16px;font:14px Arial,Helvetica,sans-serif;color:#222;background:#fff;overflow-wrap:anywhere}img{max-width:100%;height:auto}mark.hl{background:#fde293;color:inherit}</style>`;
   const html = clean.includes("<head>") ? clean.replace("<head>", `<head>${head}`) : `<!doctype html><html><head>${head}</head><body>${clean}</body></html>`;
   return { html, remoteImages };
 }
@@ -61,6 +62,7 @@ function HtmlBody({ html, attachments }: { html: string; attachments: Attachment
   const [showImages, setShowImages] = useState(false);
   const prepared = useMemo(() => prepareHtml(html, attachments, showImages), [html, attachments, showImages]);
   const frame = useRef<HTMLIFrameElement>(null);
+  const terms = useHighlight();
 
   useEffect(() => {
     const f = frame.current;
@@ -77,6 +79,7 @@ function HtmlBody({ html, attachments }: { html: string; attachments: Attachment
     const forward = (e: KeyboardEvent) =>
       window.dispatchEvent(new KeyboardEvent("keydown", { key: e.key, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey }));
     const onLoad = () => {
+      if (f.contentDocument?.body) highlightDom(f.contentDocument.body, terms);
       fit();
       f.contentDocument?.addEventListener("keydown", forward);
       const body = f.contentDocument?.body;
@@ -90,7 +93,7 @@ function HtmlBody({ html, attachments }: { html: string; attachments: Attachment
       f.removeEventListener("load", onLoad);
       observer?.disconnect();
     };
-  }, [prepared.html]);
+  }, [prepared.html, terms]);
 
   return (
     <div className="html-body">
@@ -112,6 +115,7 @@ function HtmlBody({ html, attachments }: { html: string; attachments: Attachment
 const URL_RE = /(https?:\/\/[^\s<>"')\]]+)/g;
 
 function PlainBody({ text }: { text: string }) {
+  const terms = useHighlight();
   const parts = text.split(URL_RE);
   return (
     <div className="plain-body">
@@ -121,7 +125,7 @@ function PlainBody({ text }: { text: string }) {
             {p}
           </a>
         ) : (
-          p
+          <span key={i}>{highlightText(p, terms)}</span>
         ),
       )}
     </div>

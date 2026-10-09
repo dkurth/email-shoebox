@@ -1,7 +1,8 @@
 // The app shell: header, sidebar, toolbar, and either the thread list or one thread.
 // Owns routing, data loading, the list cursor and selection, and every action.
-import { useCallback, useEffect, useRef, useState } from "react";
-import { isUserLabel, removeAction, viewLabel, viewTitle } from "../shared/labels.ts";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { isSearchView, isUserLabel, removeAction, searchQuery, viewLabel, viewTitle } from "../shared/labels.ts";
+import { highlightTerms, parseQuery } from "../shared/search.ts";
 import type {
   AppliedChange,
   ModifyResult,
@@ -27,6 +28,9 @@ import { Toast, type ToastData } from "./Toast.tsx";
 import { ChosenColorsContext, LabelOptions } from "./LabelOptions.tsx";
 import { useTheme } from "./theme.ts";
 import { NoteButton, NotePanel, useNoteSaver } from "./NotePanel.tsx";
+import { SearchBox } from "./SearchBox.tsx";
+import { SearchHelp } from "./SearchHelp.tsx";
+import { HighlightContext } from "./highlight.tsx";
 import { anyTooBigToSendOnUnload, flushAllOnUnload, onNoteSaved } from "./noteSaver.ts";
 
 function loadFlag(key: string): boolean {
@@ -70,6 +74,8 @@ export function App() {
   const lastUndo = useRef<(() => void) | null>(null);
   const [dark, toggleDark] = useTheme();
   const [noteOpen, setNoteOpen] = useState(() => loadFlag("noteOpen"));
+  const [searchHelp, setSearchHelp] = useState(false);
+  const searchInput = useRef<HTMLInputElement>(null);
 
   const readOnly = session?.readOnly ?? true;
 
@@ -386,7 +392,12 @@ export function App() {
     return targetSummaries().map((t) => withView(t.labels.filter(isUserLabel)));
   };
 
-  const dialogOpen = help || labelMenu || !!confirm || !!labelOptions;
+  const query = isSearchView(route.view) ? searchQuery(route.view) : "";
+  const terms = useMemo(() => (query ? highlightTerms(parseQuery(query)) : []), [query]);
+  const search = (q: string) => go({ view: `search:${q}` });
+  const hiddenInTrashOrSpam = (list as { hiddenInTrashOrSpam?: number } | null)?.hiddenInTrashOrSpam ?? 0;
+
+  const dialogOpen = help || labelMenu || !!confirm || !!labelOptions || searchHelp;
   useKeyboard(
     {
       j: () => step(1),
@@ -397,6 +408,7 @@ export function App() {
       u: () => route.threadId && backToList(),
       Escape: () => (route.threadId ? backToList() : (setSelected(new Set()), setAllInView(false))),
       "?": () => setHelp(true),
+      "/": () => searchInput.current?.focus(),
       "#": actions.trash,
       y: actions.remove,
       s: actions.star,
@@ -424,6 +436,7 @@ export function App() {
           </a>
           {session && <span className="archive-path" title={session.archiveDir}>{session.archiveDir}</span>}
           {session?.readOnly && <span className="badge">read-only</span>}
+          <SearchBox ref={searchInput} query={query} onSearch={search} onHelp={() => setSearchHelp(true)} />
           <span className="spacer" />
           <button className="icon-button" aria-label="Dark mode" aria-pressed={dark} title={dark ? "Dark mode is on" : "Dark mode is off"} onClick={toggleDark}>
             🌙
@@ -439,6 +452,7 @@ export function App() {
           optionsFor={labelOptions?.item.name}
         />
         <main className="main">
+          <HighlightContext.Provider value={terms}>
           <div className="toolbar">
             {route.threadId ? (
               <button className="icon-button" title="Back to list (u)" onClick={backToList}>
@@ -519,12 +533,35 @@ export function App() {
               onCursor={setCursor}
               onOpen={(t) => go({ view: route.view, page: route.page, threadId: t.threadId })}
               noteSnippets={route.view === "notes"}
+              emptyText={
+                query ? (
+                  <>
+                    No messages matched your search.
+                    {hiddenInTrashOrSpam > 0 && (
+                      <div className="hidden-matches">
+                        Some messages in Trash or Spam match your search.{" "}
+                        <button className="link-button" onClick={() => search(`in:anywhere ${query}`)}>View messages</button>
+                      </div>
+                    )}
+                  </>
+                ) : undefined
+              }
             />
           ) : (
             <div className="loading">Loading…</div>
           )}
+          </HighlightContext.Provider>
         </main>
         {help && <ShortcutHelp onClose={() => setHelp(false)} />}
+        {searchHelp && (
+          <SearchHelp
+            onClose={() => setSearchHelp(false)}
+            onExample={(q) => {
+              setSearchHelp(false);
+              search(q);
+            }}
+          />
+        )}
         {labelMenu && sidebar && (
           <LabelMenu labels={sidebar.labels.map((l) => l.name)} applied={appliedLabels()} onApply={applyLabels} onClose={() => setLabelMenu(false)} />
         )}

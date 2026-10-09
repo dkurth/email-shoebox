@@ -16,6 +16,7 @@ export const SHORTCUTS: [string, string][] = [
   ["Shift-i / Shift-u", "Mark as read / unread"],
   ["z", "Undo the last action"],
   ["g then i / s / t / a / d", "Go to Inbox / Starred / Sent / All Mail / Drafts"],
+  ["/", "Search (click ⓘ in the search box for the search options)"],
   ["?", "Show or hide this help"],
 ];
 

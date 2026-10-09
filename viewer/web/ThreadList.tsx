@@ -1,11 +1,12 @@
 // The Gmail-style list of threads: checkbox · star · participants · subject — snippet · chips · 📎 · date.
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { labelColor } from "../shared/labelColors.ts";
 import { isCategory, categoryName, isUserLabel } from "../shared/labels.ts";
 import type { ThreadList as ThreadListData, ThreadSummary } from "../shared/types.ts";
 import { listDate, participantParts } from "./format.ts";
 import { useChosenColors } from "./LabelOptions.tsx";
 import { NoteIcon } from "./NotePanel.tsx";
+import { Hl } from "./highlight.tsx";
 
 function Participants({ t }: { t: ThreadSummary }) {
   const parts = participantParts(t.participants);
@@ -40,6 +41,7 @@ export function ThreadList(props: {
   onOpen: (t: ThreadSummary) => void;
   onCursor: (i: number) => void;
   noteSnippets?: boolean; // the Notes folder: the snippet is the note's first line
+  emptyText?: ReactNode;
 }) {
   const { data, cursor, selected } = props;
   const list = useRef<HTMLUListElement>(null);
@@ -51,7 +53,7 @@ export function ThreadList(props: {
   }, [cursor]);
 
   if (!data.threads.length) {
-    return <div className="empty-list">{data.page > 1 ? "No more conversations." : "No conversations here."}</div>;
+    return <div className="empty-list">{data.page > 1 ? "No more conversations." : props.emptyText ?? "No conversations here."}</div>;
   }
   return (
     <ul className="thread-list" ref={list} role="list">
@@ -83,8 +85,8 @@ export function ThreadList(props: {
           <Participants t={t} />
           <span className="subject-snippet">
             {t.labels.map((l) => <Chip key={l} name={l} />)}
-            <span className="subject">{t.subject || "(no subject)"}</span>
-            {t.snippet && <span className={`snippet${props.noteSnippets ? " note-snippet" : ""}`}> — {t.snippet}</span>}
+            <span className="subject">{t.subject ? <Hl text={t.subject} /> : "(no subject)"}</span>
+            {t.snippet && <span className={`snippet${props.noteSnippets ? " note-snippet" : ""}`}> — <Hl text={t.snippet} /></span>}
           </span>
           <span className="row-end">
             {t.hasAttachments && <span className="clip" title="Has attachments">📎</span>}

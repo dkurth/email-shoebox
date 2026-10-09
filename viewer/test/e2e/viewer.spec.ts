@@ -346,3 +346,56 @@ test("notes: the list shows a note icon, and the Notes folder lists the thread",
   await expect(page.locator(".thread-row .subject")).toHaveText(["Pancake recipe"]);
   await expect(page.locator(".thread-row .note-snippet")).toHaveText(" — Ask Bob for the syrup.");
 });
+
+test("search: / focuses the box, results are highlighted, y archives, Back returns", async ({ page }) => {
+  server = await startServer();
+  await page.goto(server.url);
+  await expect(subjects(page)).toHaveCount(5);
+  await page.keyboard.press("/");
+  await expect(page.locator(".search-box input")).toBeFocused();
+  await page.keyboard.type("from:alice has:attachment");
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/#\/search\/from%3Aalice%20has%3Aattachment$/);
+  await expect(subjects(page)).toHaveText(["Trip planning", "Quarterly report"]);
+
+  await page.locator(".search-box input").fill("lisbon");
+  await page.keyboard.press("Enter");
+  await expect(subjects(page)).toHaveText(["Trip planning"]);
+  await expect(page.locator(".thread-row mark.hl")).toHaveText(["Lisbon"]);
+  await page.locator(".thread-row").first().click();
+  await expect(page.locator(".plain-body mark.hl")).toHaveText(["Lisbon"]);
+  await page.keyboard.press("y"); // Archive, as in Gmail's search results
+  await expect(page.locator(".toast")).toContainText("archived");
+  await expect(page).toHaveURL(/#\/search\/lisbon$/);
+  await expect(subjects(page)).toHaveText(["Trip planning"]); // still matches; it just left the Inbox
+  await page.goto(server.url + "#/inbox");
+  await expect(subjects(page)).not.toContainText(["Trip planning"]);
+});
+
+test("search: highlights inside HTML email, and offers matches in Trash", async ({ page }) => {
+  server = await startServer();
+  await page.goto(server.url + "#/search/" + encodeURIComponent("sale"));
+  await page.locator(".thread-row", { hasText: "Big sale" }).click();
+  const frame = page.frameLocator(".html-body iframe");
+  await expect(frame.locator("mark.hl")).toHaveText(["sale"]);
+
+  await page.goto(server.url + "#/search/coupon");
+  await expect(page.locator(".empty-list")).toContainText("No messages matched your search.");
+  await page.getByRole("button", { name: "View messages" }).click();
+  await expect(page).toHaveURL(/#\/search\/in%3Aanywhere%20coupon$/);
+  await expect(subjects(page)).toHaveText(["Old coupon"]);
+});
+
+test("search: the ⓘ button shows the search options", async ({ page }) => {
+  server = await startServer();
+  await page.goto(server.url);
+  await page.getByRole("button", { name: "Search options" }).click();
+  const dialog = page.getByRole("dialog", { name: "Search options" });
+  await expect(dialog).toContainText("has:attachment");
+  await expect(dialog).toContainText("note:");
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await page.getByRole("button", { name: "Search options" }).click();
+  await page.locator(".search-help .example", { hasText: "is:starred" }).click();
+  await expect(subjects(page)).toHaveText(["Pancake recipe"]);
+});

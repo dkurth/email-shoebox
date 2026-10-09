@@ -1,6 +1,8 @@
 // Notes on a thread: the toolbar's note button and the panel on the right of the thread view.
 // Saving is automatic (web/noteSaver.ts); there is no Save button.
 import { useEffect, useState } from "react";
+import { findMatches } from "../shared/search.ts";
+import { highlightText, useHighlight } from "./highlight.tsx";
 import type { NoteInfo, NoteSaveResult, ThreadDetail } from "../shared/types.ts";
 import { WRITE_HEADER } from "./api.ts";
 import { ConflictResponse, firstLine, release, saverFor, type NoteSaver, type NoteStatus, type SendFn } from "./noteSaver.ts";
@@ -107,6 +109,22 @@ function StatusLine({ status, saver }: { status: NoteStatus; saver: NoteSaver })
   }
 }
 
+/** When a search matched the note: where, with the words marked (a text box can't show marks). */
+function NoteMatch({ text }: { text: string }) {
+  const terms = useHighlight();
+  const ranges = findMatches(text, terms);
+  if (!ranges.length) return null;
+  const [s, e] = ranges[0];
+  const from = Math.max(0, text.lastIndexOf(" ", Math.max(0, s - 40)) + 1);
+  const to = Math.min(text.length, e + 80);
+  const excerpt = (from > 0 ? "…" : "") + text.slice(from, to).replace(/\s+/g, " ") + (to < text.length ? "…" : "");
+  return (
+    <div className="note-match">
+      Your search matches this note: <span>{highlightText(excerpt, terms)}</span>
+    </div>
+  );
+}
+
 export function NotePanel({ saver, readOnly }: { saver: NoteSaver; readOnly: boolean }) {
   const status = useNoteStatus(saver) ?? saver.status;
   const [text, setText] = useState(saver.text);
@@ -129,6 +147,7 @@ export function NotePanel({ saver, readOnly }: { saver: NoteSaver; readOnly: boo
           </div>
         </div>
       )}
+      <NoteMatch text={text} />
       <textarea
         className="note-text"
         value={text}
