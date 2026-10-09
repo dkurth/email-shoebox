@@ -150,6 +150,9 @@ export function Sidebar({ data, view, onLabelOptions, optionsFor }: {
           {renderTree(buildTree(data.labels), 0, "")}
         </ul>
       )}
+      <ul>
+        <Item item={{ view: "admin", name: "Archive stats", count: null }} label="Archive stats" icon="📊" active={view === "admin"} />
+      </ul>
     </nav>
   );
 }

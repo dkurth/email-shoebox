@@ -407,3 +407,25 @@ test("search: the snippet shows the text around a match deep in a long message",
   await expect(snippet).toContainText("the old lighthouse on the cape");
   await expect(snippet.locator("mark.hl")).toHaveText(["lighthouse"]);
 });
+
+test("admin: opens from the top bar and with g z; tabs; a top sender runs a search", async ({ page }) => {
+  server = await startServer();
+  await page.goto(server.url);
+  await expect(subjects(page)).toHaveCount(5);
+  await page.getByRole("button", { name: "Archive stats" }).click();
+  await expect(page).toHaveURL(/#\/admin$/);
+  await expect(page.locator(".stat", { hasText: "Messages" }).first().locator(".stat-value")).toHaveText("77");
+  await page.getByRole("tab", { name: "Imports" }).click();
+  await expect(page).toHaveURL(/#\/admin\/imports$/);
+  await expect(page.locator(".admin-table tbody tr")).toHaveCount(1);
+  await page.goBack();
+  await expect(page.getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
+  await page.locator(".admin-table a", { hasText: "news@shop.example" }).click();
+  await expect(page).toHaveURL(/#\/search\/from%3Anews%40shop\.example$/);
+  await expect(page.locator(".pager")).toContainText("of 56");
+  await page.keyboard.press("g");
+  await page.keyboard.press("z");
+  await expect(page).toHaveURL(/#\/admin$/);
+  await page.locator(".admin-table a", { hasText: "Travel/2024" }).click();
+  await expect(page).toHaveURL(/#\/label\/Travel%2F2024$/);
+});

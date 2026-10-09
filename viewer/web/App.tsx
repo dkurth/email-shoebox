@@ -31,6 +31,7 @@ import { NoteButton, NotePanel, useNoteSaver } from "./NotePanel.tsx";
 import { SearchBox } from "./SearchBox.tsx";
 import { SearchHelp } from "./SearchHelp.tsx";
 import { HighlightContext } from "./highlight.tsx";
+import { AdminPage } from "./AdminPage.tsx";
 import { anyTooBigToSendOnUnload, flushAllOnUnload, onNoteSaved } from "./noteSaver.ts";
 
 function loadFlag(key: string): boolean {
@@ -98,7 +99,10 @@ export function App() {
     setAllInView(false);
   }, [route.view, route.page]);
 
+  const admin = route.view === "admin";
+
   useEffect(() => {
+    if (admin) return;
     let stale = false;
     get<ThreadListData>("/api/threads" + q({ view: route.view, page: route.page })).then(
       (data) => {
@@ -162,8 +166,8 @@ export function App() {
 
   useEffect(() => {
     const unread = sidebar?.folders.find((f) => f.view === route.view)?.count;
-    document.title = `${viewTitle(route.view)}${unread ? ` (${unread})` : ""} - Mail archive`;
-  }, [route.view, sidebar]);
+    document.title = `${admin ? "Archive stats" : viewTitle(route.view)}${unread ? ` (${unread})` : ""} - Mail archive`;
+  }, [route.view, sidebar, admin]);
 
   const noteSaver = useNoteSaver(route.threadId ? thread : null, route.threadId);
   const toggleNote = () =>
@@ -398,8 +402,18 @@ export function App() {
   const hiddenInTrashOrSpam = (list as { hiddenInTrashOrSpam?: number } | null)?.hiddenInTrashOrSpam ?? 0;
 
   const dialogOpen = help || labelMenu || !!confirm || !!labelOptions || searchHelp;
+  const goKeys = {
+    "g i": () => go({ view: "inbox" }),
+    "g s": () => go({ view: "starred" }),
+    "g t": () => go({ view: "sent" }),
+    "g a": () => go({ view: "all" }),
+    "g d": () => go({ view: "drafts" }),
+    "g z": () => go({ view: "admin" }),
+  };
   useKeyboard(
-    {
+    admin
+      ? { "?": () => setHelp(true), "/": () => searchInput.current?.focus(), ...goKeys }
+      : {
       j: () => step(1),
       k: () => step(-1),
       x: () => !route.threadId && threads[cursor] && toggleSelect(threads[cursor].threadId),
@@ -416,11 +430,7 @@ export function App() {
       I: actions.read,
       U: actions.unread,
       z: () => lastUndo.current?.(),
-      "g i": () => go({ view: "inbox" }),
-      "g s": () => go({ view: "starred" }),
-      "g t": () => go({ view: "sent" }),
-      "g a": () => go({ view: "all" }),
-      "g d": () => go({ view: "drafts" }),
+      ...goKeys,
     },
     !dialogOpen,
   );
@@ -438,6 +448,9 @@ export function App() {
           {session?.readOnly && <span className="badge">read-only</span>}
           <SearchBox ref={searchInput} query={query} onSearch={search} onHelp={() => setSearchHelp(true)} />
           <span className="spacer" />
+          <button className="icon-button" aria-label="Archive stats" title="Archive stats (g then z)" aria-pressed={admin} onClick={() => go({ view: "admin" })}>
+            📊
+          </button>
           <button className="icon-button" aria-label="Dark mode" aria-pressed={dark} title={dark ? "Dark mode is on" : "Dark mode is off"} onClick={toggleDark}>
             🌙
           </button>
@@ -453,6 +466,10 @@ export function App() {
         />
         <main className="main">
           <HighlightContext.Provider value={terms}>
+          {admin ? (
+            <AdminPage path={route.admin ?? ""} me={me} readOnly={readOnly} />
+          ) : (
+          <>
           <div className="toolbar">
             {route.threadId ? (
               <button className="icon-button" title="Back to list (u)" onClick={backToList}>
@@ -549,6 +566,8 @@ export function App() {
             />
           ) : (
             <div className="loading">Loading…</div>
+          )}
+          </>
           )}
           </HighlightContext.Provider>
         </main>

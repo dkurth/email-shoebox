@@ -127,3 +127,59 @@ export interface TrashSummary {
   attachmentBytes: number;
   notes: number; // notes deleted with their thread (only threads with no message left)
 }
+
+// ------------------------------------------------------------------ admin page
+
+export interface AdminPerson {
+  addr: string; // an address, or a domain when grouped by domain
+  name: string; // the name used most often
+  count: number; // messages
+  addresses: number; // distinct addresses (more than 1 only when grouped by domain)
+  to: number;
+  cc: number;
+  bcc: number;
+  last: number | null; // epoch seconds
+  attachments: number; // received from this sender (non-inline)
+  attachmentBytes: number;
+}
+
+export interface AdminOverview {
+  messages: number;
+  messageBytes: number;
+  threads: number;
+  unread: number;
+  starred: number;
+  firstDate: number | null;
+  lastDate: number | null;
+  attachments: number; // in the archive, not inline
+  attachmentBytes: number;
+  inlineImages: number;
+  inlineBytes: number;
+  deletedAttachments: number;
+  deletedBytes: number;
+  dbBytes: number;
+  walBytes: number;
+  freeBytes: number; // free pages inside mail.db (Compact recovers them)
+  parseErrorCount: number;
+  parseErrors: { id: number; date: number | null; fromName: string | null; fromAddr: string | null; subject: string | null; threadId: string; error: string }[];
+  notes: number;
+  topSenders: AdminPerson[];
+}
+
+export interface AdminLabel {
+  id: number;
+  name: string;
+  messages: number;
+  threads: number;
+  unread: number; // unread messages
+}
+
+export interface AdminImport {
+  id: number;
+  startedAt: number;
+  finishedAt: number | null;
+  status: string;
+  sources: string[]; // file names
+  toolVersion: string | null;
+  counts: { seen: number; inserted: number; labelsChanged: number; unchanged: number; skipped: number; errors: number; keptLocal: number; deletedSkipped: number };
+}

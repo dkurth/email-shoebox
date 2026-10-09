@@ -1,12 +1,18 @@
 // URL hash <-> route. Examples: #/inbox  #/inbox/p2  #/label/Work%2FProjects/t/1790000000000000001
+// The admin page: #/admin, #/admin/people?dir=sent&page=2 (view "admin", the rest in `admin`).
 export interface Route {
-  view: string; // folder id, "label:<name>" or "search:<query>"
+  view: string; // folder id, "label:<name>", "search:<query>" or "admin"
   page: number;
   threadId: string | null;
+  admin?: string; // the admin page's tab and options, e.g. "people?dir=sent"
 }
 
 export function parseHash(hash: string): Route {
-  const parts = hash.replace(/^#\/?/, "").split("/").filter(Boolean);
+  const raw = hash.replace(/^#\/?/, "");
+  if (raw === "admin" || raw.startsWith("admin/") || raw.startsWith("admin?")) {
+    return { view: "admin", page: 1, threadId: null, admin: raw.slice("admin".length).replace(/^\//, "") };
+  }
+  const parts = raw.split("/").filter(Boolean);
   let view = "inbox";
   if (parts[0] === "label" && parts[1]) {
     view = "label:" + decodeURIComponent(parts[1]);
@@ -24,6 +30,7 @@ export function parseHash(hash: string): Route {
 }
 
 export function toHash(r: Partial<Route> & { view: string }): string {
+  if (r.view === "admin") return `#/admin${r.admin ? `/${r.admin}` : ""}`;
   const v = r.view.startsWith("label:")
     ? `label/${encodeURIComponent(r.view.slice(6))}`
     : r.view.startsWith("search:")

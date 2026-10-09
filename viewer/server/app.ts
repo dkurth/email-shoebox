@@ -12,6 +12,7 @@ import { listThreads, original, sidebar, threadDetail } from "./views.ts";
 import { searchThreads } from "./search.ts";
 import { isSearchView, searchQuery } from "../shared/labels.ts";
 import { NoteConflict, NotFound, saveNote } from "./notes.ts";
+import { imports, labels as adminLabels, overview } from "./admin.ts";
 import { collectNotes, exportFilename, toCsv, toMarkdown } from "./exportNotes.ts";
 
 export class BadRequest extends Error {}
@@ -89,6 +90,10 @@ export function createApp(opts: AppOptions): Hono {
     const text = original(db, intParam(c.req.param("id")));
     return text === null ? c.json({ error: "No such message" }, 404) : c.text(text, 200, { "X-Content-Type-Options": "nosniff" });
   });
+
+  app.get("/api/admin/overview", (c) => c.json(overview(archive, opts.me)));
+  app.get("/api/admin/labels", (c) => c.json(adminLabels(db)));
+  app.get("/api/admin/imports", (c) => c.json(imports(db)));
 
   app.get("/api/admin/notes/export", (c) => {
     const format = c.req.query("format") ?? "md";
