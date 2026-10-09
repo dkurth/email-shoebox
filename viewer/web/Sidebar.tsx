@@ -1,5 +1,6 @@
-// Left sidebar: folders, a collapsed Categories group, then user labels as a tree.
+// Left sidebar: folders, a collapsed Categories group, then user labels as a tree, each with its color.
 import { useState } from "react";
+import { labelColor } from "../shared/labelColors.ts";
 import type { Sidebar as SidebarData, SidebarItem } from "../shared/types.ts";
 import { go } from "./route.ts";
 
@@ -32,14 +33,18 @@ function save(key: string, v: boolean) {
   }
 }
 
-function Item({ item, active, label, depth = 0, icon, toggle, onDelete }: {
+type OnOptions = (item: SidebarItem, anchor: DOMRect) => void;
+
+function Item({ item, active, label, depth = 0, icon, color, toggle, onOptions, optionsOpen }: {
   item: SidebarItem;
   active: boolean;
   label: string;
   depth?: number;
   icon?: string;
+  color?: string; // user labels: a colored square in place of the icon
   toggle?: { open: boolean; onClick: () => void };
-  onDelete?: (item: SidebarItem) => void;
+  onOptions?: OnOptions;
+  optionsOpen?: boolean;
 }) {
   return (
     <li className={`nav-item${active ? " active" : ""}${item.count && item.view !== "drafts" ? " has-unread" : ""}`} style={{ paddingLeft: 12 + depth * 14 }}>
@@ -52,12 +57,20 @@ function Item({ item, active, label, depth = 0, icon, toggle, onDelete }: {
       )}
       <a href="#" onClick={(e) => { e.preventDefault(); go({ view: item.view }); }} title={item.name}>
         {icon && <span className="nav-icon" aria-hidden>{icon}</span>}
+        {color && <span className="nav-icon" aria-hidden><span className={`label-square lc-${color}`} /></span>}
         <span className="nav-name">{label}</span>
         {item.count ? <span className="nav-count">{item.count.toLocaleString()}</span> : null}
       </a>
-      {onDelete && (
-        <button className="nav-delete" title={`Delete label "${item.name}"`} onClick={() => onDelete(item)}>
-          ✕
+      {onOptions && (
+        <button
+          className="nav-options"
+          title={`Options for "${item.name}"`}
+          aria-label={`Options for label ${item.name}`}
+          aria-haspopup="dialog"
+          aria-expanded={!!optionsOpen}
+          onClick={(e) => onOptions(item, e.currentTarget.getBoundingClientRect())}
+        >
+          ⋮
         </button>
       )}
     </li>
@@ -88,7 +101,12 @@ function buildTree(labels: SidebarItem[]): TreeNode[] {
   return root;
 }
 
-export function Sidebar({ data, view, onDeleteLabel }: { data: SidebarData | null; view: string; onDeleteLabel?: (item: SidebarItem) => void }) {
+export function Sidebar({ data, view, onLabelOptions, optionsFor }: {
+  data: SidebarData | null;
+  view: string;
+  onLabelOptions?: OnOptions; // omitted in read-only mode
+  optionsFor?: string; // the label whose options menu is open
+}) {
   const [catsOpen, setCatsOpen] = useState(() => load("sidebar.categories", false));
   const [closed, setClosed] = useState<Set<string>>(new Set());
   if (!data) return <nav className="sidebar" />;
@@ -103,7 +121,7 @@ export function Sidebar({ data, view, onDeleteLabel }: { data: SidebarData | nul
         : undefined;
       return [
         <Item key={path} item={item} label={n.name} depth={depth} active={view === item.view} toggle={toggle}
-          onDelete={n.item && onDeleteLabel ? onDeleteLabel : undefined} />,
+          color={labelColor(path, data.labelColors)} onOptions={n.item ? onLabelOptions : undefined} optionsOpen={optionsFor === path} />,
         ...(open ? renderTree(n.children, depth + 1, path) : []),
       ];
     });

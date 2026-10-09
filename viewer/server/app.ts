@@ -5,7 +5,7 @@ import path from "node:path";
 import { viewLabel, type View } from "../shared/labels.ts";
 import { serveAttachment } from "./attachments.ts";
 import type { Archive } from "./db.ts";
-import { InputError, createLabel, deleteLabel, modifyThreads, setStar, undoChanges } from "./mutations.ts";
+import { InputError, createLabel, deleteLabel, modifyThreads, setLabelColor, setStar, undoChanges } from "./mutations.ts";
 import { guard } from "./security.ts";
 import { ConflictError, deleteForever, trashSummary } from "./trash.ts";
 import { listThreads, original, sidebar, threadDetail } from "./views.ts";
@@ -111,6 +111,7 @@ export function createApp(opts: AppOptions): Hono {
   });
   app.post("/api/labels", async (c) => c.json(createLabel(db, (await c.req.json()).name)));
   app.delete("/api/labels/:id", (c) => c.json(deleteLabel(db, intParam(c.req.param("id")))));
+  app.post("/api/labels/:id/color", async (c) => c.json(setLabelColor(db, intParam(c.req.param("id")), (await c.req.json()).color)));
 
   app.all("/api/*", (c) => c.json({ error: "Not found" }, 404));
 

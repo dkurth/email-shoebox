@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { defaultColor, labelColor } from "../shared/labelColors.ts";
 import { removeAction } from "../shared/labels.ts";
 import type { ModifyResult, Sidebar, ThreadList } from "../shared/types.ts";
 import { setup } from "./helpers.ts";
@@ -143,5 +144,49 @@ describe("labels", () => {
     expect((await ctx.post("/api/threads/modify", { view: "nope", threadIds: [], add: [], remove: [] })).status).toBe(400);
     expect((await ctx.post("/api/threads/modify", { view: "inbox", threadIds: [], add: [""], remove: [] })).status).toBe(400);
     expect((await ctx.post("/api/undo", { changes: [{ messageId: "1" }] })).status).toBe(400);
+  });
+});
+
+describe("label colors", () => {
+  const idOf = (ctx: Ctx, name: string) => ctx.db.prepare("SELECT id FROM labels WHERE name = ?").pluck().get(name) as number;
+  const stored = (ctx: Ctx) => JSON.parse((ctx.db.prepare("SELECT value FROM meta WHERE key = 'viewer_label_colors'").pluck().get() as string) ?? "{}");
+  const chosen = async (ctx: Ctx) => ((await ctx.get("/api/sidebar")).body as Sidebar).labelColors;
+
+  it("picks a stable default, never gray, and children follow their parent", () => {
+    expect(defaultColor("Travel")).toBe(defaultColor("Travel"));
+    const names = Array.from({ length: 200 }, (_, i) => `label ${i}`);
+    expect(names.map(defaultColor)).not.toContain("gray");
+    expect(new Set(names.map(defaultColor)).size).toBe(11);
+    expect(labelColor("Travel/2024", {})).toBe(defaultColor("Travel"));
+    expect(labelColor("Travel/2024", { Travel: "pink" })).toBe("pink");
+    expect(labelColor("Travel/2024", { Travel: "pink", "Travel/2024": "teal" })).toBe("teal");
+    expect(labelColor("Work", { Work: "not-a-color" })).toBe(defaultColor("Work"));
+  });
+
+  it("sets, resets, and forgets the color when the label is deleted", async () => {
+    const ctx = setup();
+    expect(await chosen(ctx)).toEqual({});
+    const id = idOf(ctx, "Travel/2024");
+    expect((await ctx.post(`/api/labels/${id}/color`, { color: "green" })).body).toEqual({ name: "Travel/2024", color: "green" });
+    await ctx.post(`/api/labels/${idOf(ctx, "Work")}/color`, { color: "red" });
+    expect(await chosen(ctx)).toEqual({ "Travel/2024": "green", Work: "red" });
+    await ctx.post(`/api/labels/${idOf(ctx, "Work")}/color`, { color: null });
+    expect(stored(ctx)).toEqual({ "Travel/2024": "green" });
+    await ctx.post(`/api/labels/${id}`, {}, "DELETE");
+    expect(stored(ctx)).toEqual({});
+  });
+
+  it("refuses unknown colors, system labels, categories and unknown labels", async () => {
+    const ctx = setup();
+    expect((await ctx.post(`/api/labels/${idOf(ctx, "Work")}/color`, { color: "chartreuse" })).status).toBe(400);
+    expect((await ctx.post(`/api/labels/${idOf(ctx, "Inbox")}/color`, { color: "red" })).status).toBe(400);
+    expect((await ctx.post(`/api/labels/${idOf(ctx, "Category Promotions")}/color`, { color: "red" })).status).toBe(400);
+    expect((await ctx.post("/api/labels/99999/color", { color: "red" })).status).toBe(400);
+    expect(await chosen(ctx)).toEqual({});
+  });
+
+  it("is refused in read-only mode", async () => {
+    const ctx = setup({ readOnly: true });
+    expect((await ctx.post(`/api/labels/${idOf(ctx, "Work")}/color`, { color: "red" })).status).toBe(403);
   });
 });

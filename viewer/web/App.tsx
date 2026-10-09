@@ -24,8 +24,11 @@ import { Sidebar } from "./Sidebar.tsx";
 import { ThreadList } from "./ThreadList.tsx";
 import { ThreadView } from "./ThreadView.tsx";
 import { Toast, type ToastData } from "./Toast.tsx";
+import { ChosenColorsContext, LabelOptions } from "./LabelOptions.tsx";
 
 type After = "stay" | "list" | "next";
+
+const NO_COLORS = {};
 
 export function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -42,6 +45,7 @@ export function App() {
   const returningFrom = useRef<string | null>(null);
   const [help, setHelp] = useState(false);
   const [labelMenu, setLabelMenu] = useState(false);
+  const [labelOptions, setLabelOptions] = useState<{ item: SidebarItem; anchor: DOMRect } | null>(null);
   const [confirm, setConfirm] = useState<ConfirmData | null>(null);
   const [toast, setToast] = useState<ToastData | null>(null);
   const lastUndo = useRef<(() => void) | null>(null);
@@ -307,6 +311,16 @@ export function App() {
       },
     });
 
+  const setLabelColor = async (item: SidebarItem, color: string | null) => {
+    setLabelOptions(null);
+    try {
+      await post(`/api/labels/${item.labelId}/color`, { color });
+      refreshSidebar(); // chips get their colors from the sidebar data
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
   /** User labels on each target thread, for the Labels menu's checkboxes. */
   const appliedLabels = (): string[][] => {
     const current = viewLabel(route.view);
@@ -315,7 +329,7 @@ export function App() {
     return targetSummaries().map((t) => withView(t.labels.filter(isUserLabel)));
   };
 
-  const dialogOpen = help || labelMenu || !!confirm;
+  const dialogOpen = help || labelMenu || !!confirm || !!labelOptions;
   useKeyboard(
     {
       j: () => step(1),
@@ -345,100 +359,120 @@ export function App() {
   const hasTargets = !!route.threadId || selected.size > 0;
 
   return (
-    <div className="app">
-      <header className="topbar">
-        <a className="brand" href="#/inbox">
-          <span aria-hidden>✉️</span> Mail archive
-        </a>
-        {session && <span className="archive-path" title={session.archiveDir}>{session.archiveDir}</span>}
-        {session?.readOnly && <span className="badge">read-only</span>}
-        <span className="spacer" />
-        <button className="icon-button" title="Keyboard shortcuts (?)" onClick={() => setHelp(true)}>
-          ⌨️
-        </button>
-      </header>
-      <Sidebar data={sidebar} view={route.view} onDeleteLabel={readOnly ? undefined : deleteLabel} />
-      <main className="main">
-        <div className="toolbar">
-          {route.threadId ? (
-            <button className="icon-button" title="Back to list (u)" onClick={backToList}>
-              ←
-            </button>
-          ) : (
-            <input
-              type="checkbox"
-              className="select-all"
-              aria-label="Select all"
-              checked={allSelected}
-              onChange={() => {
-                setAllInView(false);
-                setSelected(allSelected ? new Set() : new Set(threads.map((t) => t.threadId)));
-              }}
-            />
-          )}
-          {hasTargets && !readOnly && (
-            <span className="actions">
-              {remove && <button className="text-button" title={`${remove.button} (y)`} onClick={actions.remove}>{remove.button}</button>}
-              {route.view !== "trash" && <button className="text-button" title="Move to Trash (#)" onClick={actions.trash}>Move to Trash</button>}
-              {route.view === "trash" && <button className="text-button danger" title="Delete forever (#)" onClick={actions.trash}>Delete forever</button>}
-              <button className="text-button" title="Label as (l)" onClick={actions.labels}>Labels ▾</button>
-              <button className="text-button" title="Mark as read (Shift-i)" onClick={actions.read}>Mark read</button>
-              <button className="text-button" title="Mark as unread (Shift-u)" onClick={actions.unread}>Mark unread</button>
-              <button className="text-button" title="Star (s)" onClick={actions.star}>Star</button>
-            </span>
-          )}
+    <ChosenColorsContext.Provider value={sidebar?.labelColors ?? NO_COLORS}>
+      <div className="app">
+        <header className="topbar">
+          <a className="brand" href="#/inbox">
+            <span aria-hidden>✉️</span> Mail archive
+          </a>
+          {session && <span className="archive-path" title={session.archiveDir}>{session.archiveDir}</span>}
+          {session?.readOnly && <span className="badge">read-only</span>}
           <span className="spacer" />
-          {list && !route.threadId && (
-            <span className="pager">
-              {list.total ? `${(pageStart + 1).toLocaleString()}–${(pageStart + threads.length).toLocaleString()} of ${list.total.toLocaleString()}` : ""}
-              <button className="icon-button" title="Newer" disabled={list.page <= 1} onClick={() => go({ view: route.view, page: list.page - 1 })}>
-                ‹
+          <button className="icon-button" title="Keyboard shortcuts (?)" onClick={() => setHelp(true)}>
+            ⌨️
+          </button>
+        </header>
+        <Sidebar
+          data={sidebar}
+          view={route.view}
+          onLabelOptions={readOnly ? undefined : (item, anchor) => setLabelOptions({ item, anchor })}
+          optionsFor={labelOptions?.item.name}
+        />
+        <main className="main">
+          <div className="toolbar">
+            {route.threadId ? (
+              <button className="icon-button" title="Back to list (u)" onClick={backToList}>
+                ←
               </button>
-              <button className="icon-button" title="Older" disabled={pageStart + threads.length >= list.total} onClick={() => go({ view: route.view, page: list.page + 1 })}>
-                ›
-              </button>
-            </span>
-          )}
-        </div>
-        {!route.threadId && allSelected && list && list.total > threads.length && (
-          <div className="select-banner">
-            {allInView ? (
-              <>All {list.total.toLocaleString()} conversations in {viewTitle(route.view)} are selected. <button className="link-button" onClick={() => { setAllInView(false); setSelected(new Set()); }}>Clear selection</button></>
             ) : (
-              <>All {threads.length} conversations on this page are selected. <button className="link-button" onClick={() => setAllInView(true)}>Select all {list.total.toLocaleString()} conversations in {viewTitle(route.view)}</button></>
+              <input
+                type="checkbox"
+                className="select-all"
+                aria-label="Select all"
+                checked={allSelected}
+                onChange={() => {
+                  setAllInView(false);
+                  setSelected(allSelected ? new Set() : new Set(threads.map((t) => t.threadId)));
+                }}
+              />
+            )}
+            {hasTargets && !readOnly && (
+              <span className="actions">
+                {remove && <button className="text-button" title={`${remove.button} (y)`} onClick={actions.remove}>{remove.button}</button>}
+                {route.view !== "trash" && <button className="text-button" title="Move to Trash (#)" onClick={actions.trash}>Move to Trash</button>}
+                {route.view === "trash" && <button className="text-button danger" title="Delete forever (#)" onClick={actions.trash}>Delete forever</button>}
+                <button className="text-button" title="Label as (l)" onClick={actions.labels}>Labels ▾</button>
+                <button className="text-button" title="Mark as read (Shift-i)" onClick={actions.read}>Mark read</button>
+                <button className="text-button" title="Mark as unread (Shift-u)" onClick={actions.unread}>Mark unread</button>
+                <button className="text-button" title="Star (s)" onClick={actions.star}>Star</button>
+              </span>
+            )}
+            <span className="spacer" />
+            {list && !route.threadId && (
+              <span className="pager">
+                {list.total ? `${(pageStart + 1).toLocaleString()}–${(pageStart + threads.length).toLocaleString()} of ${list.total.toLocaleString()}` : ""}
+                <button className="icon-button" title="Newer" disabled={list.page <= 1} onClick={() => go({ view: route.view, page: list.page - 1 })}>
+                  ‹
+                </button>
+                <button className="icon-button" title="Older" disabled={pageStart + threads.length >= list.total} onClick={() => go({ view: route.view, page: list.page + 1 })}>
+                  ›
+                </button>
+              </span>
             )}
           </div>
+          {!route.threadId && allSelected && list && list.total > threads.length && (
+            <div className="select-banner">
+              {allInView ? (
+                <>All {list.total.toLocaleString()} conversations in {viewTitle(route.view)} are selected. <button className="link-button" onClick={() => { setAllInView(false); setSelected(new Set()); }}>Clear selection</button></>
+              ) : (
+                <>All {threads.length} conversations on this page are selected. <button className="link-button" onClick={() => setAllInView(true)}>Select all {list.total.toLocaleString()} conversations in {viewTitle(route.view)}</button></>
+              )}
+            </div>
+          )}
+          {route.view === "trash" && !route.threadId && !readOnly && !!list?.total && (
+            <div className="trash-bar">
+              Conversations stay in Trash until you delete them.
+              <button className="link-button" onClick={() => deleteForever()}>Empty Trash now</button>
+            </div>
+          )}
+          {error && <div className="error-banner" onClick={() => setError(null)}>{error}</div>}
+          {route.threadId ? (
+            thread ? <ThreadView key={thread.threadId} thread={thread} me={me} view={route.view} /> : <div className="loading">Loading…</div>
+          ) : list ? (
+            <ThreadList
+              key={`${route.view}/${route.page}`}
+              data={list}
+              cursor={cursor}
+              selected={selected}
+              onToggleSelect={toggleSelect}
+              onToggleStar={readOnly ? undefined : (t) => run("/api/threads/star", { starred: !t.starred, threadIds: [t.threadId] }, (n) => `${conv(n)} ${t.starred ? "unstarred" : "starred"}.`, "stay", { undo: false })}
+              onCursor={setCursor}
+              onOpen={(t) => go({ view: route.view, page: route.page, threadId: t.threadId })}
+            />
+          ) : (
+            <div className="loading">Loading…</div>
+          )}
+        </main>
+        {help && <ShortcutHelp onClose={() => setHelp(false)} />}
+        {labelMenu && sidebar && (
+          <LabelMenu labels={sidebar.labels.map((l) => l.name)} applied={appliedLabels()} onApply={applyLabels} onClose={() => setLabelMenu(false)} />
         )}
-        {route.view === "trash" && !route.threadId && !readOnly && !!list?.total && (
-          <div className="trash-bar">
-            Conversations stay in Trash until you delete them.
-            <button className="link-button" onClick={() => deleteForever()}>Empty Trash now</button>
-          </div>
-        )}
-        {error && <div className="error-banner" onClick={() => setError(null)}>{error}</div>}
-        {route.threadId ? (
-          thread ? <ThreadView key={thread.threadId} thread={thread} me={me} view={route.view} /> : <div className="loading">Loading…</div>
-        ) : list ? (
-          <ThreadList
-            key={`${route.view}/${route.page}`}
-            data={list}
-            cursor={cursor}
-            selected={selected}
-            onToggleSelect={toggleSelect}
-            onToggleStar={readOnly ? undefined : (t) => run("/api/threads/star", { starred: !t.starred, threadIds: [t.threadId] }, (n) => `${conv(n)} ${t.starred ? "unstarred" : "starred"}.`, "stay", { undo: false })}
-            onCursor={setCursor}
-            onOpen={(t) => go({ view: route.view, page: route.page, threadId: t.threadId })}
+        {labelOptions && sidebar && (
+          <LabelOptions
+            item={labelOptions.item}
+            anchor={labelOptions.anchor}
+            chosen={sidebar.labelColors}
+            onColor={(color) => setLabelColor(labelOptions.item, color)}
+            onDelete={() => {
+              setLabelOptions(null);
+              deleteLabel(labelOptions.item);
+            }}
+            onClose={() => setLabelOptions(null)}
           />
-        ) : (
-          <div className="loading">Loading…</div>
         )}
-      </main>
-      {help && <ShortcutHelp onClose={() => setHelp(false)} />}
-      {labelMenu && sidebar && (
-        <LabelMenu labels={sidebar.labels.map((l) => l.name)} applied={appliedLabels()} onApply={applyLabels} onClose={() => setLabelMenu(false)} />
-      )}
-      {confirm && <ConfirmDialog data={confirm} onCancel={() => setConfirm(null)} />}
-      {toast && <Toast toast={toast} onClose={() => setToast(null)} />}
-    </div>
+        {confirm && <ConfirmDialog data={confirm} onCancel={() => setConfirm(null)} />}
+        {toast && <Toast toast={toast} onClose={() => setToast(null)} />}
+      </div>
+    </ChosenColorsContext.Provider>
   );
 }

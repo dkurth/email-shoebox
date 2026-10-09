@@ -112,6 +112,8 @@ test("read-only mode shows no write actions", async ({ page }) => {
   await page.keyboard.press("#");
   await expect(page.locator(".toast")).toContainText("read-only");
   await expect(subjects(page)).toHaveCount(5);
+  await expect(page.locator(".sidebar .label-square").first()).toBeVisible(); // colors show,
+  await expect(page.locator(".nav-options")).toHaveCount(0); // but can't be changed
 });
 
 test("Expand all shows only when a message is collapsed", async ({ page }) => {
@@ -145,4 +147,43 @@ test("starring offers no Undo, and z does not undo an older action", async ({ pa
   await page.locator(".thread-row").first().locator(".star").click();
   await expect(page.locator(".toast")).toContainText("Conversation unstarred.");
   await expect(page.locator(".toast-undo")).toHaveCount(0);
+});
+
+test("label colors: pick one in the sidebar menu; children follow; Default color resets", async ({ page }) => {
+  server = await startServer();
+  await page.goto(server.url + "#/all");
+  const navItem = (name: string) => page.locator(".sidebar .nav-item").filter({ has: page.getByText(name, { exact: true }) });
+  const square = (name: string) => navItem(name).locator(".label-square");
+  const chip = page.locator(".thread-row").filter({ hasText: "Quarterly report" }).locator(".chip", { hasText: "Work" });
+  await expect(square("Work")).toHaveClass(/lc-blue/); // the default for "Work"
+  await expect(chip).toHaveClass(/lc-blue/);
+
+  await navItem("Work").hover();
+  await navItem("Work").getByRole("button", { name: "Options for label Work" }).click();
+  await page.getByRole("button", { name: "Teal" }).click();
+  await expect(page.locator(".label-options")).toHaveCount(0);
+  await expect(square("Work")).toHaveClass(/lc-teal/);
+  await expect(square("Projects")).toHaveClass(/lc-teal/); // Work/Projects follows its parent
+  await expect(chip).toHaveClass(/lc-teal/);
+
+  await page.reload(); // stored in the archive
+  await expect(square("Work")).toHaveClass(/lc-teal/);
+  await navItem("Work").hover();
+  await navItem("Work").getByRole("button", { name: "Options for label Work" }).click();
+  await expect(page.getByRole("button", { name: "Teal" })).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".label-options")).toHaveCount(0);
+  await expect(page).toHaveURL(/#\/all$/); // Esc only closed the menu
+
+  await navItem("Work").hover();
+  await navItem("Work").getByRole("button", { name: "Options for label Work" }).click();
+  await page.getByRole("button", { name: "Default color" }).click();
+  await expect(square("Work")).toHaveClass(/lc-blue/);
+  await expect(chip).toHaveClass(/lc-blue/);
+  await navItem("Projects").hover();
+  await navItem("Projects").getByRole("button", { name: "Options for label Work/Projects" }).click();
+  await page.getByRole("button", { name: "Delete label…" }).click();
+  await expect(page.getByRole("alertdialog")).toContainText('Delete the label "Work/Projects"?');
+  await page.getByRole("button", { name: "Delete label", exact: true }).click();
+  await expect(navItem("Projects")).toHaveCount(0);
 });

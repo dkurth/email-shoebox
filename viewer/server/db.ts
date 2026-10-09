@@ -2,6 +2,7 @@
 import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
+import type { ChosenColors } from "../shared/labelColors.ts";
 
 export const SUPPORTED_SCHEMA_VERSIONS = [2];
 
@@ -54,6 +55,20 @@ export function setMeta(db: DB, key: string, value: string): void {
     key,
     value,
   );
+}
+
+/** Label colors chosen in the viewer (label name -> color id). A viewer-owned meta key. */
+export function chosenColors(db: DB): ChosenColors {
+  try {
+    const v = JSON.parse(getMeta(db, "viewer_label_colors") ?? "{}");
+    return v && typeof v === "object" && !Array.isArray(v) ? v : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveChosenColors(db: DB, colors: ChosenColors): void {
+  setMeta(db, "viewer_label_colors", JSON.stringify(colors));
 }
 
 /**

@@ -20,7 +20,7 @@ import type {
   ThreadList,
   ThreadSummary,
 } from "../shared/types.ts";
-import type { DB } from "./db.ts";
+import { chosenColors, type DB } from "./db.ts";
 
 export const PAGE_SIZE = 50;
 const DATE = "coalesce(m.received_utc, m.date_utc, 0)";
@@ -166,7 +166,7 @@ export function sidebar(db: DB): Sidebar {
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }))
     .map((l) => ({ view: `label:${l.name}`, name: l.name, count: unread.get(l.id) || null, messages: messages.get(l.id) ?? 0, labelId: l.id }));
 
-  return { folders, categories, labels: user };
+  return { folders, categories, labels: user, labelColors: chosenColors(db) };
 }
 
 // ------------------------------------------------------------------ thread list

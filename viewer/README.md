@@ -41,8 +41,12 @@ Options (after `--`):
 
 - **Sidebar:** Inbox, Starred, Important, Sent, Drafts, Chats, All Mail, Spam
   and Trash (with unread counts, as Gmail shows them), a collapsed Categories
-  group, then your labels as a tree (`Parent/Child`). Hover a label and click ✕
-  to delete it; the messages stay.
+  group, then your labels as a tree (`Parent/Child`). Hover a label and click
+  ⋮ to change its color or delete it (the messages stay).
+- **Label colors:** Takeout doesn't include the colors you chose in Gmail, so
+  each label gets one from a fixed palette, picked from its name. A nested
+  label uses its parent's color until you choose one. Chosen colors are saved
+  in the archive (`meta.viewer_label_colors`), and imports leave them alone.
 - **List:** one row per conversation, newest first, 50 per page, as in Gmail.
   A conversation is in a folder or label if any of its messages is. Mail in
   Spam or Trash is hidden everywhere else.
@@ -52,7 +56,7 @@ Options (after `--`):
   headers and decoded parts. **Click an attachment to download it.**
 - **Opening a conversation marks it read.**
 - **Undo:** after archive, trash or a label change, a message at the bottom
-  left offers **Undo** (or press `z`).
+  left offers **Undo** (or press `z`). Star and unstar have no Undo: star again.
 - **Empty Trash:** in Trash, "Empty Trash now" (or select conversations and
   "Delete forever"). A dialog shows how many messages, conversations and
   attachments will be deleted. **Confirmed deletes are permanent**: the rows

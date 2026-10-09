@@ -1,5 +1,7 @@
 // JSON shapes of the API, shared by the server and the web front end.
 
+import type { ChosenColors } from "./labelColors.ts";
+
 export interface Session {
   me: string[];
   schemaVersion: number;
@@ -19,6 +21,7 @@ export interface Sidebar {
   folders: SidebarItem[];
   categories: SidebarItem[];
   labels: SidebarItem[];
+  labelColors: ChosenColors; // only the colors chosen in the viewer; see shared/labelColors.ts
 }
 
 export interface Participant {

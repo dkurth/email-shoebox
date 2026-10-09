@@ -3,7 +3,8 @@
 // set labels_edited_at (so re-imports keep the change), and refresh the affected threads rows.
 import { SYSTEM_LABELS, applyChange, isCategory, type LabelChange, type View } from "../shared/labels.ts";
 import type { AppliedChange, ModifyResult } from "../shared/types.ts";
-import type { DB } from "./db.ts";
+import { isLabelColor } from "../shared/labelColors.ts";
+import { chosenColors, saveChosenColors, type DB } from "./db.ts";
 import { contextSql, viewSql } from "./views.ts";
 
 export class InputError extends Error {}
@@ -180,6 +181,24 @@ export function deleteLabel(db: DB, id: number): { messages: number } {
   db.transaction(() => {
     writeChanges(db, ids.map((messageId) => ({ messageId, added: [], removed: [name] })));
     db.prepare("DELETE FROM labels WHERE id = ?").run(id);
+    const colors = chosenColors(db);
+    if (name in colors) {
+      delete colors[name];
+      saveChosenColors(db, colors);
+    }
   })();
   return { messages: ids.length };
+}
+
+/** Choose a user label's color; null goes back to the default. */
+export function setLabelColor(db: DB, id: number, color: unknown): { name: string; color: string | null } {
+  const name = db.prepare("SELECT name FROM labels WHERE id = ?").pluck().get(id) as string | undefined;
+  if (name === undefined) throw new InputError("no such label");
+  if (SYSTEM_LABELS.has(name) || isCategory(name)) throw new InputError("system labels have no color");
+  if (color !== null && !isLabelColor(color)) throw new InputError(`unknown color: ${String(color)}`);
+  const colors = chosenColors(db);
+  if (color === null) delete colors[name];
+  else colors[name] = color;
+  saveChosenColors(db, colors);
+  return { name, color };
 }

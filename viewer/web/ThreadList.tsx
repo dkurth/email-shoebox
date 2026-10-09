@@ -1,8 +1,10 @@
 // The Gmail-style list of threads: checkbox · star · participants · subject — snippet · chips · 📎 · date.
 import { useEffect, useRef } from "react";
-import { isCategory, categoryName } from "../shared/labels.ts";
+import { labelColor } from "../shared/labelColors.ts";
+import { isCategory, categoryName, isUserLabel } from "../shared/labels.ts";
 import type { ThreadList as ThreadListData, ThreadSummary } from "../shared/types.ts";
 import { listDate, participantParts } from "./format.ts";
+import { useChosenColors } from "./LabelOptions.tsx";
 
 function Participants({ t }: { t: ThreadSummary }) {
   const parts = participantParts(t.participants);
@@ -21,8 +23,11 @@ function Participants({ t }: { t: ThreadSummary }) {
   );
 }
 
+/** A label chip; user labels show their color, system labels and categories stay gray. */
 export function Chip({ name }: { name: string }) {
-  return <span className="chip">{isCategory(name) ? categoryName(name) : name}</span>;
+  const chosen = useChosenColors();
+  const color = isUserLabel(name) ? ` lc lc-${labelColor(name, chosen)}` : "";
+  return <span className={`chip${color}`}>{isCategory(name) ? categoryName(name) : name}</span>;
 }
 
 export function ThreadList(props: {
