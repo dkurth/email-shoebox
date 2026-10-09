@@ -327,3 +327,22 @@ test("notes: a change in another tab shows the conflict choice", async ({ page, 
   await page.locator(".note-text").fill("From this tab, after all.");
   await expect(page.locator(".note-status")).toContainText("Saved");
 });
+
+test("notes: the list shows a note icon, and the Notes folder lists the thread", async ({ page }) => {
+  server = await startServer();
+  await page.goto(server.url + "#/starred");
+  await expect(page.locator(".nav-item", { hasText: "Notes" })).toHaveCount(0);
+  await page.locator(".thread-row", { hasText: "Pancake recipe" }).click();
+  await page.locator(".note-button").click();
+  await page.locator(".note-text").fill("Ask Bob for the syrup.\nSecond line.");
+  await expect(page.locator(".note-status")).toContainText("Saved");
+  await page.keyboard.press("Escape"); // blur the text box
+  await page.locator('button[title="Back to list (u)"]').click();
+
+  const row = page.locator(".thread-row", { hasText: "Pancake recipe" });
+  await expect(row.locator(".note-mark")).toHaveAttribute("title", "Note: Ask Bob for the syrup.");
+  await page.locator(".nav-item", { hasText: "Notes" }).click();
+  await expect(page).toHaveURL(/#\/notes$/);
+  await expect(page.locator(".thread-row .subject")).toHaveText(["Pancake recipe"]);
+  await expect(page.locator(".thread-row .note-snippet")).toHaveText(" — Ask Bob for the syrup.");
+});

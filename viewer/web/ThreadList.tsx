@@ -5,6 +5,7 @@ import { isCategory, categoryName, isUserLabel } from "../shared/labels.ts";
 import type { ThreadList as ThreadListData, ThreadSummary } from "../shared/types.ts";
 import { listDate, participantParts } from "./format.ts";
 import { useChosenColors } from "./LabelOptions.tsx";
+import { NoteIcon } from "./NotePanel.tsx";
 
 function Participants({ t }: { t: ThreadSummary }) {
   const parts = participantParts(t.participants);
@@ -38,6 +39,7 @@ export function ThreadList(props: {
   onToggleStar?: (t: ThreadSummary) => void;
   onOpen: (t: ThreadSummary) => void;
   onCursor: (i: number) => void;
+  noteSnippets?: boolean; // the Notes folder: the snippet is the note's first line
 }) {
   const { data, cursor, selected } = props;
   const list = useRef<HTMLUListElement>(null);
@@ -82,10 +84,15 @@ export function ThreadList(props: {
           <span className="subject-snippet">
             {t.labels.map((l) => <Chip key={l} name={l} />)}
             <span className="subject">{t.subject || "(no subject)"}</span>
-            {t.snippet && <span className="snippet"> — {t.snippet}</span>}
+            {t.snippet && <span className={`snippet${props.noteSnippets ? " note-snippet" : ""}`}> — {t.snippet}</span>}
           </span>
           <span className="row-end">
             {t.hasAttachments && <span className="clip" title="Has attachments">📎</span>}
+            {t.hasNote && (
+              <span className="note-mark" title={t.noteFirstLine ? `Note: ${t.noteFirstLine}` : "Has a note"} aria-label="Has a note">
+                <NoteIcon filled size={15} />
+              </span>
+            )}
             <span className="date">{listDate(t.date)}</span>
           </span>
         </li>

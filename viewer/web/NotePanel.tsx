@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type { NoteInfo, NoteSaveResult, ThreadDetail } from "../shared/types.ts";
 import { WRITE_HEADER } from "./api.ts";
-import { ConflictResponse, release, saverFor, type NoteSaver, type NoteStatus, type SendFn } from "./noteSaver.ts";
+import { ConflictResponse, firstLine, release, saverFor, type NoteSaver, type NoteStatus, type SendFn } from "./noteSaver.ts";
 
 export const sendNote: SendFn = async (threadId, body, opts) => {
   const res = await fetch(`/api/threads/${encodeURIComponent(threadId)}/note`, {
@@ -50,9 +50,9 @@ export function useNoteStatus(saver: NoteSaver | null): NoteStatus | null {
   return status;
 }
 
-export function NoteIcon({ filled }: { filled: boolean }) {
+export function NoteIcon({ filled, size = 20 }: { filled: boolean; size?: number }) {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden className={`note-icon${filled ? " filled" : ""}`}>
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className={`note-icon${filled ? " filled" : ""}`}>
       <path
         d="M5 3h10l4 4v14H5z"
         fill={filled ? "currentColor" : "none"}
@@ -63,10 +63,6 @@ export function NoteIcon({ filled }: { filled: boolean }) {
       <path d="M8.5 11h7M8.5 14.5h7M8.5 18h4.5" stroke={filled ? "var(--panel)" : "currentColor"} strokeWidth="1.6" strokeLinecap="round" />
     </svg>
   );
-}
-
-export function firstLine(text: string): string {
-  return (text.split("\n").find((l) => l.trim()) ?? "").trim();
 }
 
 export function NoteButton({ saver, open, onToggle }: { saver: NoteSaver; open: boolean; onToggle: () => void }) {

@@ -14,6 +14,7 @@ const ICONS: Record<string, string> = {
   all: "📚",
   spam: "⚠️",
   trash: "🗑️",
+  notes: "🗒️",
 };
 
 function load(key: string, fallback: boolean): boolean {

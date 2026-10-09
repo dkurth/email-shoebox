@@ -237,3 +237,5 @@ kbd { background: var(--chip); border-radius: 4px; padding: 1px 6px; font: 12px 
   .thread-area { flex-direction: column; }
   .note-panel { width: auto; border-left: 0; border-top: 1px solid var(--line); }
 }
+.note-mark { display: inline-flex; color: var(--accent); }
+.note-snippet { font-style: italic; }

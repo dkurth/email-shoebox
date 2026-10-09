@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { NoteSaveResult, ThreadDetail, ThreadList, TrashSummary } from "../shared/types.ts";
+import type { NoteSaveResult, Sidebar, ThreadDetail, ThreadList, TrashSummary } from "../shared/types.ts";
 import { setup } from "./helpers.ts";
 
 const threadOf = (ctx: ReturnType<typeof setup>, subject: string) =>
@@ -90,5 +90,43 @@ describe("notes", () => {
     expect(r.body.notes).toBe(1);
     const left = ctx.db.prepare("SELECT thread_id FROM thread_notes").pluck().all();
     expect(left).toEqual([mixed]);
+  });
+});
+
+describe("the Notes folder", () => {
+  it("lists threads with a note, newest note first, with the note as the snippet", async () => {
+    const ctx = setup();
+    const sidebar = async () => ((await ctx.get("/api/sidebar")).body as Sidebar).folders.find((f) => f.view === "notes");
+    expect(await sidebar()).toBeUndefined(); // hidden while there are no notes
+
+    const pancake = threadOf(ctx, "Pancake recipe");
+    const trip = threadOf(ctx, "Trip planning");
+    const coupon = threadOf(ctx, "Old coupon"); // only in Trash: left out
+    await put(ctx, trip, { body: "Book flights\nby Friday", expectedUpdatedAt: null });
+    await put(ctx, coupon, { body: "trashed thread", expectedUpdatedAt: null });
+    await put(ctx, pancake, { body: "Buttermilk", expectedUpdatedAt: null });
+
+    const list = (await ctx.get("/api/threads?view=notes")).body as ThreadList;
+    expect(list.total).toBe(2);
+    expect(list.threads.map((t) => [t.subject, t.snippet])).toEqual([
+      ["Pancake recipe", "Buttermilk"],
+      ["Trip planning", "Book flights"],
+    ]);
+    expect(list.threads[1].date).toBeGreaterThan(0); // the newest message's date
+    expect((await sidebar())?.count).toBe(2);
+
+    // Changing an older note moves it to the top.
+    const tripNote = ctx.db.prepare("SELECT updated_at FROM thread_notes WHERE thread_id = ?").pluck().get(trip) as number;
+    await put(ctx, trip, { body: "Flights booked", expectedUpdatedAt: tripNote });
+    const again = (await ctx.get("/api/threads?view=notes")).body as ThreadList;
+    expect(again.threads.map((t) => t.subject)).toEqual(["Trip planning", "Pancake recipe"]);
+  });
+
+  it("y does nothing there, and select-all acts only on threads with a note", async () => {
+    const ctx = setup();
+    const pancake = threadOf(ctx, "Pancake recipe");
+    await put(ctx, pancake, { body: "x", expectedUpdatedAt: null });
+    const r = await ctx.post("/api/threads/modify", { view: "notes", all: true, add: ["Work"], remove: [] });
+    expect(r.body.threads).toBe(1);
   });
 });

@@ -27,7 +27,7 @@ import { Toast, type ToastData } from "./Toast.tsx";
 import { ChosenColorsContext, LabelOptions } from "./LabelOptions.tsx";
 import { useTheme } from "./theme.ts";
 import { NoteButton, NotePanel, useNoteSaver } from "./NotePanel.tsx";
-import { anyTooBigToSendOnUnload, flushAllOnUnload } from "./noteSaver.ts";
+import { anyTooBigToSendOnUnload, flushAllOnUnload, onNoteSaved } from "./noteSaver.ts";
 
 function loadFlag(key: string): boolean {
   try {
@@ -165,6 +165,9 @@ export function App() {
       saveFlag("noteOpen", !o);
       return !o;
     });
+
+  // A note was added, removed or its first line changed: the list icons and the Notes folder change.
+  useEffect(() => onNoteSaved(reload), [reload]);
 
   // Closing or reloading the page: send unsaved notes with keepalive.
   useEffect(() => {
@@ -515,6 +518,7 @@ export function App() {
               onToggleStar={readOnly ? undefined : (t) => run("/api/threads/star", { starred: !t.starred }, null, "stay", [t.threadId])}
               onCursor={setCursor}
               onOpen={(t) => go({ view: route.view, page: route.page, threadId: t.threadId })}
+              noteSnippets={route.view === "notes"}
             />
           ) : (
             <div className="loading">Loading…</div>

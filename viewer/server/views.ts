@@ -4,6 +4,7 @@ import {
   FOLDERS,
   categoryName,
   isCategory,
+  isNotesView,
   isUserLabel,
   viewContext,
   viewLabel,
@@ -58,6 +59,7 @@ interface FromSql extends Sql {
  */
 export function viewSql(db: DB, view: View): FromSql {
   const label = viewLabel(view);
+  if (isNotesView(view)) return { from: "thread_notes n CROSS JOIN messages m ON m.thread_id = n.thread_id", ...contextSql(db, view) };
   if (label === null) return { from: "messages m", ...contextSql(db, view) };
   const from = "message_labels vl CROSS JOIN messages m ON m.id = vl.message_id";
   if (label === "Trash" || label === "Spam") return { from, sql: "vl.label_id = ?", params: [labelId(db, label) ?? -1] };
@@ -145,6 +147,11 @@ export function sidebar(db: DB): Sidebar {
 
   const folders: SidebarItem[] = [];
   for (const f of FOLDERS) {
+    if (f.notes) {
+      const n = viewPage(db, f.id, 1).total;
+      if (n) folders.push({ view: f.id, name: f.name, count: n });
+      continue;
+    }
     const id = f.label ? byName.get(f.label) : undefined;
     if (f.hideIfEmpty && (id === undefined || !messages.get(id))) continue;
     let count: number | null = null;
@@ -189,29 +196,63 @@ interface ListRow {
   in_view: number;
 }
 
-export function listThreads(db: DB, view: View, page: number, me: string[]): ThreadList {
-  const v = viewSql(db, view);
+/** One page of a thread list: which threads, in what order, and how many in all. */
+export interface PageRows {
+  rows: { thread_id: string; last: number | null }[]; // last: the date to show; null = the newest message's
+  total: number;
+}
+
+/** The threads of a folder or label view, newest first (the Notes folder: newest note first). */
+export function viewPage(db: DB, view: View, page: number): PageRows {
   const offset = (page - 1) * PAGE_SIZE;
-  const pageRows = db
+  if (isNotesView(view)) {
+    // Threads with a note that have a message outside Trash and Spam.
+    const ctx = contextSql(db, view);
+    const where = `EXISTS (SELECT 1 FROM messages m WHERE m.thread_id = n.thread_id AND ${ctx.sql})`;
+    const rows = db
+      .prepare(
+        `SELECT n.thread_id, NULL AS last, count(*) OVER () AS total FROM thread_notes n WHERE ${where}
+         ORDER BY n.updated_at DESC, n.thread_id DESC LIMIT ? OFFSET ?`,
+      )
+      .all(...ctx.params, PAGE_SIZE, offset) as { thread_id: string; last: null; total: number }[];
+    const total = rows[0]?.total ?? (db.prepare(`SELECT count(*) FROM thread_notes n WHERE ${where}`).pluck().get(...ctx.params) as number);
+    return { rows, total };
+  }
+  const v = viewSql(db, view);
+  const rows = db
     .prepare(
       `WITH t AS (SELECT m.thread_id, max(${DATE}) AS last FROM ${v.from} WHERE ${v.sql} GROUP BY m.thread_id)
        SELECT thread_id, last, count(*) OVER () AS total FROM t ORDER BY last DESC, thread_id DESC LIMIT ? OFFSET ?`,
     )
     .all(...v.params, PAGE_SIZE, offset) as { thread_id: string; last: number; total: number }[];
-  let total = pageRows[0]?.total ?? 0;
-  if (!pageRows.length && page > 1) {
+  let total = rows[0]?.total ?? 0;
+  if (!rows.length && page > 1) {
     total = db.prepare(`SELECT count(DISTINCT m.thread_id) FROM ${v.from} WHERE ${v.sql}`).pluck().get(...v.params) as number;
   }
+  return { rows, total };
+}
+
+export function listThreads(db: DB, view: View, page: number, me: string[]): ThreadList {
+  return summarizeThreads(db, view, page, viewPage(db, view, page), me);
+}
+
+/**
+ * The rows of one page: participants, snippet, chips… for the 50 threads only.
+ * inView: which messages count as "in the view" (the snippet and date come from the newest of them);
+ * default: messages with the view's label.
+ */
+export function summarizeThreads(db: DB, view: View, page: number, p: PageRows, me: string[], opts: { inView?: Sql } = {}): ThreadList {
+  const { rows: pageRows, total } = p;
   const ids = pageRows.map((r) => r.thread_id);
   if (!ids.length) return { view, page, pageSize: PAGE_SIZE, total, threads: [] };
 
   const ctx = contextSql(db, view);
   const label = viewLabel(view);
-  const inView =
-    label && label !== "Trash" && label !== "Spam"
+  const inView = opts.inView ??
+    (label && label !== "Trash" && label !== "Spam"
       ? // Correlated EXISTS: one primary-key probe per message (an IN list would gather every message with the label).
         { sql: "EXISTS (SELECT 1 FROM message_labels il WHERE il.message_id = m.id AND il.label_id = ?)", params: [labelId(db, label) ?? -1] }
-      : { sql: "1", params: [] };
+      : { sql: "1", params: [] });
   const rows = db
     .prepare(
       `SELECT m.id, m.thread_id, m.subject, m.snippet, m.from_name, m.from_addr, m.to_json, m.cc_json,
@@ -254,8 +295,8 @@ export function listThreads(db: DB, view: View, page: number, me: string[]): Thr
     return {
       threadId: thread_id,
       subject: msgs.find((m) => m.subject)?.subject ?? "",
-      snippet: newest?.snippet ?? "",
-      date: last || null,
+      snippet: isNotesView(view) ? notes.get(thread_id) ?? "" : newest?.snippet ?? "",
+      date: (last ?? newest?.d) || null,
       participants,
       toPrefix,
       messageCount: msgs.length,

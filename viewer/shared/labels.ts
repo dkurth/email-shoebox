@@ -6,6 +6,7 @@ export interface FolderDef {
   label: string | null; // the Gmail label behind it; null = All Mail
   hideIfEmpty?: boolean;
   count?: "unread" | "total"; // which number the sidebar shows
+  notes?: boolean; // the Notes folder: threads that have a note, newest note first
 }
 
 export const FOLDERS: FolderDef[] = [
@@ -18,7 +19,10 @@ export const FOLDERS: FolderDef[] = [
   { id: "all", name: "All Mail", label: null },
   { id: "spam", name: "Spam", label: "Spam", count: "unread" },
   { id: "trash", name: "Trash", label: "Trash" },
+  { id: "notes", name: "Notes", label: null, notes: true, hideIfEmpty: true, count: "total" },
 ];
+
+export const isNotesView = (view: View) => view === "notes";
 
 /** Labels Gmail uses internally; never shown as user labels. */
 export const SYSTEM_LABELS = new Set([

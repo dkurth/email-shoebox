@@ -103,7 +103,9 @@ export class NoteSaver {
     this.setStatus({ kind: "saving" });
     this.inflight = this.send(this.threadId, { body, expectedUpdatedAt: this.updatedAt, ...(force ? { force: true } : {}) }, {})
       .then((r) => {
+        const before = firstLine(this.saved);
         this.saved = body; // (empty or only spaces: the server deleted the note)
+        if (firstLine(body) !== before) notifySaved(this.threadId); // the list's icon or tooltip changes
         this.updatedAt = r.note?.updatedAt ?? null;
         this.retries = 0;
         this.setStatus({ kind: "saved", at: this.updatedAt });
@@ -172,6 +174,23 @@ export class NoteSaver {
 }
 
 // ------------------------------------------------------------------ registry
+
+/** The first non-empty line (the list shows it). Empty = no note. */
+export function firstLine(text: string): string {
+  return (text.split("\n").find((l) => l.trim()) ?? "").trim();
+}
+
+const savedListeners = new Set<(threadId: string) => void>();
+
+/** Called after a save that may change the thread list (a note added, removed, or its first line). */
+export function onNoteSaved(fn: (threadId: string) => void): () => void {
+  savedListeners.add(fn);
+  return () => savedListeners.delete(fn);
+}
+
+function notifySaved(threadId: string) {
+  for (const fn of savedListeners) fn(threadId);
+}
 
 const savers = new Map<string, NoteSaver>();
 
