@@ -1,0 +1,10 @@
+node_modules/
+dist/
+test-results/
+playwright-report/
+.DS_Store
+# real archives never belong here; the synthetic test archive does
+gmail-archive/
+*.db-wal
+*.db-shm
+!test/fixtures/archive/
