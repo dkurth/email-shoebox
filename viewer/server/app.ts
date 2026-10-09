@@ -14,7 +14,7 @@ import { searchThreads } from "./search.ts";
 import { isSearchView, searchQuery } from "../shared/labels.ts";
 import { NoteConflict, NotFound, saveNote } from "./notes.ts";
 import { imports, labels as adminLabels, lists, overview, people, person } from "./admin.ts";
-import { report, summary as attachmentSummary, type ReportQuery } from "./attachmentReport.ts";
+import { dupeGroups, dupeSummary, report, summary as attachmentSummary, type ReportQuery } from "./attachmentReport.ts";
 import { TYPE_GROUPS } from "../shared/fileTypes.ts";
 import { collectNotes, exportFilename, toCsv, toMarkdown } from "./exportNotes.ts";
 
@@ -128,6 +128,8 @@ export function createApp(opts: AppOptions): Hono {
     if (type && !(TYPE_GROUPS as readonly string[]).includes(type)) throw new BadRequest(`unknown type: ${type}`);
     const min = get("min");
     if (min && !/^\d+$/.test(min)) throw new BadRequest("min must be a number of bytes");
+    const sha256 = get("sha256");
+    if (sha256 && !/^[0-9a-f]{64}$/.test(sha256)) throw new BadRequest("bad sha256");
     return {
       sort: sort as ReportQuery["sort"],
       desc: get("desc") !== "0",
@@ -136,9 +138,15 @@ export function createApp(opts: AppOptions): Hono {
       min: min ? Number(min) : undefined,
       deleted: flag(get("deleted")),
       inline: flag(get("inline")),
+      dupes: flag(get("dupes")),
+      sha256: sha256 || undefined,
     };
   };
-  app.get("/api/admin/attachments", (c) => c.json(report(db, { ...reportQuery((k) => c.req.query(k)), page: intParam(c.req.query("page"), 1) })));
+  app.get("/api/admin/attachments", (c) => {
+    const rq = { ...reportQuery((k) => c.req.query(k)), page: intParam(c.req.query("page"), 1) };
+    return c.json(rq.dupes && !rq.sha256 ? { groups: dupeGroups(db, rq) } : report(db, rq));
+  });
+  app.get("/api/admin/attachments/dupes-summary", (c) => c.json(dupeSummary(db)));
   app.get("/api/admin/person", (c) => {
     const addr = c.req.query("addr");
     if (!addr) throw new BadRequest("addr is required");
@@ -193,8 +201,8 @@ export function createApp(opts: AppOptions): Hono {
     return c.json(saveNote(db, c.req.param("threadId"), body.body, body.expectedUpdatedAt ?? null, body.force === true));
   });
   // The report's filter, as sent by the page (same names as the report's URL).
-  const deleteTarget = (body: { ids?: unknown; filter?: Record<string, string> }): DeleteTarget =>
-    body.filter ? { filter: reportQuery((k) => body.filter?.[k]) } : { ids: body.ids };
+  const deleteTarget = (body: { ids?: unknown; sha256s?: unknown; filter?: Record<string, string> }): DeleteTarget =>
+    body.filter ? { filter: reportQuery((k) => body.filter?.[k]) } : body.sha256s ? { sha256s: body.sha256s } : { ids: body.ids };
   app.post("/api/attachments/delete-summary", async (c) => c.json(deleteSummary(db, deleteTarget(await c.req.json()))));
   app.post("/api/attachments/delete", async (c) => {
     const body = await c.req.json();

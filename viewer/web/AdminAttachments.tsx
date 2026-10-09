@@ -3,8 +3,8 @@
 import { useState, type ReactNode } from "react";
 import { TYPE_GROUPS } from "../shared/fileTypes.ts";
 import { previewKind } from "../shared/preview.ts";
-import type { AttachmentRow, AttachmentSummary } from "../shared/types.ts";
-import { post, q as query } from "./api.ts";
+import type { AttachmentRow, AttachmentSummary, DupeGroup } from "../shared/types.ts";
+import { get, post, q as query } from "./api.ts";
 import { ConfirmDialog, type ConfirmData } from "./ConfirmDialog.tsx";
 import { fullDate, size } from "./format.ts";
 import { Lightbox } from "./Lightbox.tsx";
@@ -120,6 +120,9 @@ function Filters({ params, setParams }: AdminProps) {
       <label>
         <input type="checkbox" checked={params.get("deleted") === "1"} onChange={(e) => setParams({ deleted: e.target.checked ? 1 : null, page: null })} /> Show deleted
       </label>
+      <label>
+        <input type="checkbox" checked={params.get("dupes") === "1"} onChange={(e) => setParams({ dupes: e.target.checked ? 1 : null, sha256: null, page: null })} /> Duplicates only
+      </label>
     </div>
   );
 }
@@ -143,7 +146,7 @@ function Preview({ r, onImage }: { r: AttachmentRow; onImage: () => void }) {
 
 export function reportUrl(params: URLSearchParams): string {
   const p: Record<string, string> = {};
-  for (const k of ["sort", "desc", "type", "from", "min", "deleted", "inline", "page", "dupes"]) {
+  for (const k of ["sort", "desc", "type", "from", "min", "deleted", "inline", "page", "dupes", "sha256"]) {
     const v = params.get(k);
     if (v) p[k] = v;
   }
@@ -201,7 +204,14 @@ export function AttachmentList(props: AdminProps & ReportExtras & { version?: nu
                 {r.filename || "(no name)"}
                 {r.deletedAt ? <span className="deleted-mark"> (deleted)</span> : null}
               </td>
-              <td className="num">{size(r.size)}</td>
+              <td className="num">
+                {size(r.size)}
+                {r.copies > 1 && !params.get("sha256") && (
+                  <button className="copies-badge" title="Show every copy of this file" onClick={() => setParams({ dupes: 1, sha256: r.sha256, page: null })}>
+                    {r.copies} copies
+                  </button>
+                )}
+              </td>
               <td title={r.contentType ?? ""}>{r.typeGroup}</td>
               <td>{fullDate(r.date)}</td>
               <td title={r.fromName ?? ""}>{r.fromAddr}</td>
@@ -233,12 +243,108 @@ export function AttachmentList(props: AdminProps & ReportExtras & { version?: nu
   );
 }
 
+/** One row per group of identical files. "Show copies" lists each email that has one. */
+function DupeList(props: AdminProps & { version: number; onDeleteCopies?: (g: DupeGroup) => void; onDeleteOne?: (r: AttachmentRow) => void; selection?: GroupSelection }) {
+  const { params, setParams, version, selection } = props;
+  const { data, error } = useAdminData<{ groups: { rows: DupeGroup[]; total: number } }>(reportUrl(params) + `&v=${version}`);
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const page = Number(params.get("page") ?? 1);
+  if (error) return <div className="error-banner">{error}</div>;
+  if (!data) return <div className="loading">Loading…</div>;
+  const { rows, total } = data.groups;
+  const start = (page - 1) * PAGE;
+  const pageAll = rows.length > 0 && rows.every((g) => selection?.picked.has(g.sha256));
+  return (
+    <>
+      <div className="report-bar">
+        {selection?.bar(rows, total)}
+        <span className="pager">
+          {total ? `${num(start + 1)}–${num(Math.min(total, start + PAGE))} of ${num(total)} files` : "No duplicates match."}
+          <button className="icon-button" title="Previous" disabled={page <= 1} onClick={() => setParams({ page: page - 1 > 1 ? page - 1 : null })}>‹</button>
+          <button className="icon-button" title="Next" disabled={start + PAGE >= total} onClick={() => setParams({ page: page + 1 })}>›</button>
+        </span>
+      </div>
+      <table className="admin-table report">
+        <thead>
+          <tr>
+            {selection && (
+              <th className="check">
+                <input type="checkbox" aria-label="Select every file on this page" checked={!!selection.allMatching || pageAll} onChange={() => selection.setPage(pageAll ? [] : rows)} />
+              </th>
+            )}
+            <th>File name</th>
+            <th className="num">Size</th>
+            <th className="num">Copies</th>
+            <th className="num">Space used by the extra copies</th>
+            <th />
+          </tr>
+        </thead>
+        {rows.map((g) => (
+          <tbody key={g.sha256}>
+            <tr>
+              {selection && (
+                <td className="check">
+                  <input type="checkbox" aria-label={`Select ${g.name}`} checked={!!selection.allMatching || selection.picked.has(g.sha256)} disabled={!!selection.allMatching} onChange={() => selection.toggle(g)} />
+                </td>
+              )}
+              <td className="file-cell">
+                {g.name}
+                {g.otherNames.length > 0 && <div className="muted-small">Also named: {g.otherNames.join(", ")}</div>}
+              </td>
+              <td className="num">{size(g.size)}</td>
+              <td className="num">{num(g.copies)}</td>
+              <td className="num">{size(g.extraBytes)}</td>
+              <td className="row-actions">
+                <button className="link-button" onClick={() => setOpen((o) => { const n = new Set(o); if (n.has(g.sha256)) n.delete(g.sha256); else n.add(g.sha256); return n; })}>
+                  {open.has(g.sha256) ? "Hide copies" : "Show copies"}
+                </button>
+                {props.onDeleteCopies && <button className="link-button danger-link" onClick={() => props.onDeleteCopies!(g)}>Delete all copies</button>}
+              </td>
+            </tr>
+            {open.has(g.sha256) && <Copies sha256={g.sha256} version={version} onDeleteOne={props.onDeleteOne} colSpan={selection ? 6 : 5} />}
+          </tbody>
+        ))}
+      </table>
+    </>
+  );
+}
+
+function Copies({ sha256, version, onDeleteOne, colSpan }: { sha256: string; version: number; onDeleteOne?: (r: AttachmentRow) => void; colSpan: number }) {
+  const { data } = useAdminData<{ rows: AttachmentRow[] }>("/api/admin/attachments" + query({ sha256, sort: "date", v: version }));
+  if (!data) return <tr className="sub-row"><td colSpan={colSpan}>Loading…</td></tr>;
+  return (
+    <>
+      {data.rows.map((r) => (
+        <tr key={r.id} className="sub-row copy-row">
+          <td colSpan={colSpan - 1}>
+            {fullDate(r.date)} · {r.fromName || r.fromAddr} · {r.subject || "(no subject)"}
+            {r.filename ? ` · ${r.filename}` : ""}
+          </td>
+          <td className="row-actions">
+            <a href="#" onClick={(e) => { e.preventDefault(); go({ view: "all", threadId: r.threadId }); }}>Open email</a>
+            <a href={`/api/attachments/${r.id}/download`} download={r.filename ?? ""}>Download</a>
+            {onDeleteOne && <button className="link-button danger-link" onClick={() => onDeleteOne(r)}>Delete</button>}
+          </td>
+        </tr>
+      ))}
+    </>
+  );
+}
+
+interface GroupSelection {
+  picked: Map<string, DupeGroup>;
+  allMatching: { count: number; bytes: number } | null;
+  toggle: (g: DupeGroup) => void;
+  setPage: (rows: DupeGroup[]) => void;
+  bar: (rows: DupeGroup[], total: number) => ReactNode;
+}
+
 /** Confirm, then delete attachment files (the emails stay). Shared by every delete button on the page. */
 export function useAttachmentDelete(onDone: () => void) {
   const [confirm, setConfirm] = useState<ConfirmData | null>(null);
   const [message, setMessage] = useState<{ text: string; error?: boolean } | null>(null);
   /** target: the ids to delete, or the report filter ("all that match"). */
-  const ask = async (target: { ids: number[] } | { filter: Record<string, string> }, what?: ReactNode) => {
+  const ask = async (target: { ids: number[] } | { sha256s: string[] } | { filter: Record<string, string> }, what?: ReactNode) => {
     try {
       const s = await post<{ count: number; bytes: number; names: string[] }>("/api/attachments/delete-summary", target);
       if (!s.count) return setMessage({ text: "Nothing to delete." });
@@ -251,7 +357,7 @@ export function useAttachmentDelete(onDone: () => void) {
               Delete {files} ({size(s.bytes)}) from the archive? The email{s.count === 1 ? "" : "s"} will be kept. <strong>This can't be undone.</strong>
             </p>
             {what}
-            {s.count > 1 && (
+            {s.count > 1 && !what && (
               <ul className="confirm-list">
                 {s.names.map((n, i) => <li key={i}>{n}</li>)}
                 {s.count > s.names.length && <li>…and {num(s.count - s.names.length)} more</li>}
@@ -393,6 +499,62 @@ export function AttachmentsTab(props: AdminProps) {
           );
         },
       };
+  // Duplicates: checkboxes pick whole groups, and deleting one deletes every copy.
+  const [groups, setGroups] = useState<Map<string, DupeGroup>>(new Map());
+  const key = params.toString();
+  const [groupsKey, setGroupsKey] = useState(key);
+  if (key !== groupsKey) {
+    setGroupsKey(key);
+    setGroups(new Map());
+  }
+  const groupBytes = [...groups.values()].reduce((s, g) => s + g.size * g.copies, 0);
+  const groupCount = [...groups.values()].reduce((s, g) => s + g.copies, 0);
+  const groupSelection: GroupSelection | undefined = readOnly
+    ? undefined
+    : {
+        picked: groups,
+        allMatching: sel.allMatching,
+        toggle: (g) => setGroups((m) => { const n = new Map(m); if (n.has(g.sha256)) n.delete(g.sha256); else n.set(g.sha256, g); return n; }),
+        setPage: (rows) => { sel.setAllMatching(null); setGroups(new Map(rows.map((g) => [g.sha256, g]))); },
+        bar: (rows, total) => {
+          if (sel.allMatching) {
+            return (
+              <span className="selection-bar">
+                <button className="text-button danger filled" onClick={() => del.ask({ filter: filterOf(params) })}>
+                  Delete all {num(sel.allMatching.count)} copies ({size(sel.allMatching.bytes)})
+                </button>
+                Every copy of all {num(total)} files that match is selected.
+                <button className="link-button" onClick={sel.clear}>Clear selection</button>
+              </span>
+            );
+          }
+          if (!groups.size) return null;
+          const pageAll = rows.every((g) => groups.has(g.sha256));
+          return (
+            <span className="selection-bar">
+              <button className="text-button danger filled" onClick={() => del.ask({ sha256s: [...groups.keys()] })}>
+                Delete selected ({num(groupCount)} copies of {num(groups.size)} file{groups.size === 1 ? "" : "s"}, {size(groupBytes)})
+              </button>
+              {pageAll && total > rows.length && (
+                <button className="link-button" onClick={() => void selectAllMatching()}>Select all {num(total)} files that match</button>
+              )}
+            </span>
+          );
+        },
+      };
+  const deleteCopies = async (g: DupeGroup) => {
+    const c = await get<{ rows: AttachmentRow[] }>("/api/admin/attachments" + query({ sha256: g.sha256, sort: "date" }));
+    const emails = (
+      <ul className="confirm-list">
+        {c.rows.slice(0, 10).map((r) => <li key={r.id}>{fullDate(r.date)} · {r.fromName || r.fromAddr} · {r.subject || "(no subject)"}</li>)}
+        {c.rows.length > 10 && <li>…and {num(c.rows.length - 10)} more</li>}
+      </ul>
+    );
+    del.ask({ sha256s: [g.sha256] }, <>They are in these emails:{emails}</>);
+  };
+  const deleteOne = (r: AttachmentRow) => del.ask({ ids: [r.id] });
+  const dupes = params.get("dupes") === "1";
+  const oneFile = params.get("sha256");
   return (
     <div className="admin-attachments">
       {del.ui}
@@ -400,13 +562,37 @@ export function AttachmentsTab(props: AdminProps) {
       <section>
         <h2>All attachments</h2>
         <Filters {...props} />
-        <AttachmentList
-          {...props}
-          {...selection}
-          version={version}
-          rowEnd={readOnly ? undefined : (r) => (r.deletedAt ? null : <button className="link-button danger-link" onClick={() => del.ask({ ids: [r.id] })}>Delete</button>)}
-        />
+        {dupes && <DupeBanner version={version} />}
+        {oneFile && (
+          <div className="filter-chip one-file">
+            Copies of one file
+            <button aria-label="Show all duplicates" onClick={() => setParams({ sha256: null, page: null })}>✕</button>
+          </div>
+        )}
+        {dupes && !oneFile ? (
+          <DupeList {...props} version={version} selection={groupSelection} onDeleteCopies={readOnly ? undefined : deleteCopies} onDeleteOne={readOnly ? undefined : deleteOne} />
+        ) : (
+          <AttachmentList
+            {...props}
+            {...selection}
+            version={version}
+            rowEnd={readOnly ? undefined : (r) => (r.deletedAt ? null : <button className="link-button danger-link" onClick={() => deleteOne(r)}>Delete</button>)}
+          />
+        )}
       </section>
+    </div>
+  );
+}
+
+/** "2,847 files are stored more than once…" (the Merge button joins this in the next part). */
+function DupeBanner({ version }: { version: number }) {
+  const { data } = useAdminData<{ groups: number; extraCopies: number; extraBytes: number }>("/api/admin/attachments/dupes-summary" + query({ v: version }));
+  if (!data) return null;
+  return (
+    <div className="dupe-banner">
+      {data.groups
+        ? `${num(data.groups)} ${data.groups === 1 ? "file is" : "files are"} stored more than once: ${num(data.extraCopies)} extra ${data.extraCopies === 1 ? "copy uses" : "copies use"} ${size(data.extraBytes)}.`
+        : "No file is stored more than once."}
     </div>
   );
 }

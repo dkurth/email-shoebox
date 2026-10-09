@@ -561,3 +561,25 @@ test("delete all in a thread can include images inside the email text", async ({
   await expect(page.locator(".toast")).toContainText("1 attachment deleted.");
   await expect(page.frameLocator(".html-body iframe").locator('img[alt="logo"]')).toHaveAttribute("src", /^data:image\/svg\+xml/);
 });
+
+test("duplicates: the badge, Duplicates only, Show copies, Delete all copies", async ({ page }) => {
+  server = await startServer();
+  await page.goto(server.url + "#/admin/attachments");
+  const rows = page.locator(".admin-table.report tbody tr");
+  await rows.filter({ hasText: "sunset.jpg" }).first().getByRole("button", { name: "2 copies" }).click();
+  await expect(page).toHaveURL(/dupes=1/);
+  await expect(page).toHaveURL(/sha256=/);
+  await expect(rows).toHaveCount(2);
+  await page.getByRole("button", { name: "Show all duplicates" }).click();
+  await expect(page.locator(".dupe-banner")).toContainText("2 files are stored more than once");
+  const group = page.locator(".admin-table.report tbody").filter({ hasText: "sunset.jpg" });
+  await group.getByRole("button", { name: "Show copies" }).click();
+  await expect(group.locator(".copy-row")).toHaveCount(2);
+  await group.getByRole("button", { name: "Delete all copies" }).click();
+  const dialog = page.getByRole("alertdialog");
+  await expect(dialog).toContainText("Delete 2 attachments (484 B)");
+  await expect(dialog.locator(".confirm-list li")).toHaveCount(2);
+  await dialog.getByRole("button", { name: "Delete 2 attachments" }).click();
+  await expect(page.locator(".info-banner")).toContainText("2 attachments deleted");
+  await expect(page.locator(".dupe-banner")).toContainText("1 file is stored more than once");
+});

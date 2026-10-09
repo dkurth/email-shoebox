@@ -329,3 +329,8 @@ mark.hl { background: #fde293; color: inherit; border-radius: 2px; }
 .selection-bar { display: flex; align-items: center; gap: 12px; font-size: 13px; flex-wrap: wrap; }
 .thread-menu { width: 300px; z-index: 15; }
 .dialog-check { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; margin-top: 8px; cursor: pointer; }
+.copies-badge { display: block; margin-left: auto; margin-top: 2px; border: 0; background: var(--chip); color: var(--text); border-radius: 10px; padding: 0 8px; font-size: 11px; cursor: pointer; white-space: nowrap; }
+.copies-badge:hover { background: var(--active); }
+.dupe-banner { background: var(--hover); border-radius: 8px; padding: 10px 14px; margin: 8px 0; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.copy-row td { color: var(--text); }
+.one-file { margin: 8px 0; }

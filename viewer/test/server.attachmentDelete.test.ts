@@ -106,3 +106,51 @@ describe("deleting attachments", () => {
     expect(ctx.db.prepare("SELECT count(*) FROM attachments WHERE id = ?").pluck().get(coupon.id)).toBe(0);
   });
 });
+
+describe("duplicates", () => {
+  type Groups = { groups: { rows: import("../shared/types.ts").DupeGroup[]; total: number } };
+  type Report = { rows: import("../shared/types.ts").AttachmentRow[]; total: number };
+  const sunsetSha = (ctx: ReturnType<typeof setup>) => ctx.db.prepare("SELECT sha256 FROM attachments WHERE filename = 'sunset.jpg'").pluck().get() as string;
+
+  it("groups identical files and counts copies", async () => {
+    const ctx = setup();
+    const g = ((await ctx.get("/api/admin/attachments?dupes=1")).body as Groups).groups;
+    // sunset.jpg twice; and a 1×1 PNG as photo.png, coupon.png and the inline logo (left out by default).
+    expect(g.total).toBe(2);
+    expect(g.rows[0]).toMatchObject({ name: "sunset.jpg", otherNames: [], size: 242, copies: 2, extraBytes: 242 });
+    expect(g.rows[1]).toMatchObject({ size: 70, copies: 2 });
+    expect([g.rows[1].name, ...g.rows[1].otherNames].sort()).toEqual(["coupon.png", "photo.png"]);
+    expect((await ctx.get("/api/admin/attachments/dupes-summary")).body).toEqual({ groups: 2, extraCopies: 3, extraBytes: 242 + 2 * 70 });
+    const r = (await ctx.get("/api/admin/attachments")).body as Report;
+    expect(r.rows.filter((x) => x.filename === "sunset.jpg").map((x) => x.copies)).toEqual([2, 2]);
+    expect(r.rows.find((x) => x.filename === "beach.png")!.copies).toBe(1);
+    const copies = (await ctx.get(`/api/admin/attachments?sha256=${sunsetSha(ctx)}`)).body as Report;
+    expect(copies.rows.map((x) => x.subject).sort()).toEqual(["Fwd: Holiday media", "Holiday media"]);
+  });
+
+  it("deletes all copies of a file", async () => {
+    const ctx = setup();
+    const sha = sunsetSha(ctx);
+    const s = (await ctx.post("/api/attachments/delete-summary", { sha256s: [sha] })).body as { count: number; bytes: number };
+    expect(s).toMatchObject({ count: 2, bytes: 484 });
+    const r = await ctx.post("/api/attachments/delete", { sha256s: [sha], confirmCount: 2, confirmBytes: 484 });
+    expect(r.body.deleted).toBe(2);
+    expect(((await ctx.get("/api/admin/attachments?dupes=1")).body as Groups).groups.rows.map((x) => x.name)).not.toContain("sunset.jpg");
+    expect((await ctx.post("/api/attachments/delete-summary", { sha256s: ["nope"] })).status).toBe(400);
+  });
+
+  it("a deleted copy doesn't count: one copy left is not a duplicate", async () => {
+    const ctx = setup();
+    const one = ctx.db.prepare("SELECT id FROM attachments WHERE filename = 'sunset.jpg' LIMIT 1").pluck().get() as number;
+    await ctx.post("/api/attachments/delete", { ids: [one], confirmCount: 1, confirmBytes: 242 });
+    expect(((await ctx.get("/api/admin/attachments?dupes=1")).body as Groups).groups.total).toBe(1);
+    const r = (await ctx.get("/api/admin/attachments")).body as Report;
+    expect(r.rows.find((x) => x.filename === "sunset.jpg")!.copies).toBe(1);
+  });
+
+  it("delete by the duplicates filter deletes every copy", async () => {
+    const ctx = setup();
+    const s = (await ctx.post("/api/attachments/delete-summary", { filter: { dupes: "1" } })).body as { count: number; bytes: number };
+    expect(s.count).toBe(4); // both sunset.jpg copies, photo.png and coupon.png (not the inline logo)
+  });
+});

@@ -2,7 +2,7 @@
 // It reads the attachments table (narrow), the sender rows and the thread index; message rows only
 // for the subjects of the 100 rows on the page.
 import { TYPE_RULES, TYPE_GROUPS, type TypeGroup } from "../shared/fileTypes.ts";
-import type { AttachmentRow, AttachmentSummary } from "../shared/types.ts";
+import type { AttachmentRow, AttachmentSummary, DupeGroup } from "../shared/types.ts";
 import type { DB } from "./db.ts";
 
 export const REPORT_PAGE = 100;
@@ -61,8 +61,13 @@ export interface ReportQuery {
   min?: number; // bytes
   deleted?: boolean; // also show deleted ones
   inline?: boolean; // also show images inside email text
+  dupes?: boolean; // only files stored more than once
+  sha256?: string; // only the copies of one file
   page: number;
 }
+
+/** Files (by content) stored more than once, not counting deleted copies. */
+const DUPE_SHAS = "SELECT sha256 FROM attachments WHERE deleted_at IS NULL GROUP BY sha256 HAVING count(*) > 1";
 
 /** The WHERE clause and params for a report filter (also used to delete "all that match"). */
 export function reportWhere(rq: Omit<ReportQuery, "sort" | "desc" | "page">): { sql: string; params: unknown[] } {
@@ -83,6 +88,11 @@ export function reportWhere(rq: Omit<ReportQuery, "sort" | "desc" | "page">): { 
     where.push("x.size_bytes > ?");
     params.push(rq.min);
   }
+  if (rq.dupes) where.push(`x.sha256 IN (${DUPE_SHAS})`);
+  if (rq.sha256) {
+    where.push("x.sha256 = ?");
+    params.push(rq.sha256);
+  }
   return { sql: where.length ? where.join(" AND ") : "1", params };
 }
 
@@ -100,9 +110,10 @@ export function report(db: DB, rq: ReportQuery): { rows: AttachmentRow[]; total:
       `WITH md AS MATERIALIZED (SELECT id, thread_id, coalesce(received_utc, date_utc) AS d FROM messages INDEXED BY messages_thread_date)
        SELECT x.id, x.filename, x.size_bytes AS size, x.content_type AS contentType, x.deleted_at AS deletedAt, x.is_inline AS isInline,
               x.sha256, x.message_id AS messageId, md.thread_id AS threadId, md.d AS date, snd.addr AS fromAddr, snd.name AS fromName,
-              ${GROUP_SQL} AS typeGroup, count(*) OVER () AS total
+              ${GROUP_SQL} AS typeGroup, coalesce(d.copies, 1) AS copies, count(*) OVER () AS total
        FROM attachments x JOIN md ON md.id = x.message_id
        LEFT JOIN message_addresses snd ON snd.message_id = x.message_id AND snd.role = 'from'
+       LEFT JOIN (SELECT sha256, count(*) AS copies FROM attachments WHERE deleted_at IS NULL GROUP BY sha256 HAVING count(*) > 1) d ON d.sha256 = x.sha256
        WHERE ${w.sql}
        ORDER BY ${order}, x.id LIMIT ? OFFSET ?`,
     )
@@ -115,5 +126,52 @@ export function report(db: DB, rq: ReportQuery): { rows: AttachmentRow[]; total:
   return {
     rows: rows.map(({ total: _t, isInline, ...r }) => ({ ...r, isInline: !!isInline, subject: subjects.get(r.messageId) ?? null })),
     total,
+  };
+}
+
+// ------------------------------------------------------------------ duplicates
+
+export interface DupeSummary {
+  groups: number; // files stored more than once
+  extraCopies: number; // copies beyond the first
+  extraBytes: number; // the space those copies use
+}
+
+export function dupeSummary(db: DB): DupeSummary {
+  return db
+    .prepare(
+      `SELECT count(*) AS groups, coalesce(sum(n - 1), 0) AS extraCopies, coalesce(sum((n - 1) * size), 0) AS extraBytes
+       FROM (SELECT count(*) AS n, max(size_bytes) AS size FROM attachments WHERE deleted_at IS NULL GROUP BY sha256 HAVING count(*) > 1)`,
+    )
+    .get() as DupeSummary;
+}
+
+/** "Duplicates only": one row per group of identical files, most space used by the extra copies first. */
+export function dupeGroups(db: DB, rq: ReportQuery): { rows: DupeGroup[]; total: number } {
+  const w = reportWhere({ ...rq, dupes: true, deleted: false });
+  const dir = rq.desc === false ? "ASC" : "DESC";
+  const order = { size: `extra ${dir}`, name: `lower(name) ${dir}`, date: `newest ${dir}`, sender: `extra ${dir}` }[rq.sort ?? "size"];
+  const rows = db
+    .prepare(
+      `WITH c AS MATERIALIZED (SELECT x.id, x.sha256, coalesce(x.filename, '(no name)') AS filename, x.size_bytes, x.message_id FROM attachments x WHERE ${w.sql}),
+       g AS (SELECT sha256, count(*) AS copies, max(size_bytes) AS size, max(message_id) AS newest
+             FROM c GROUP BY sha256 HAVING count(*) > 1)
+       SELECT g.sha256, g.copies, g.size, (g.copies - 1) * g.size AS extra, g.newest,
+              (SELECT group_concat(n, char(31)) FROM (SELECT DISTINCT c.filename AS n FROM c WHERE c.sha256 = g.sha256)) AS names,
+              (SELECT c.filename FROM c WHERE c.sha256 = g.sha256 ORDER BY c.message_id DESC LIMIT 1) AS name,
+              count(*) OVER () AS total
+       FROM g ORDER BY ${order}, g.sha256 LIMIT ? OFFSET ?`,
+    )
+    .all(...w.params, REPORT_PAGE, (rq.page - 1) * REPORT_PAGE) as { sha256: string; copies: number; size: number; extra: number; names: string; name: string; total: number }[];
+  return {
+    rows: rows.map((r) => ({
+      sha256: r.sha256,
+      name: r.name,
+      otherNames: r.names.split("\x1f").filter((n) => n !== r.name),
+      size: r.size,
+      copies: r.copies,
+      extraBytes: r.extra,
+    })),
+    total: rows[0]?.total ?? 0,
   };
 }

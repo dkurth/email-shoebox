@@ -228,4 +228,14 @@ export interface AttachmentRow {
   fromAddr: string | null;
   fromName: string | null;
   subject: string | null;
+  copies: number; // identical files (same sha256) in the archive, this one included; deleted ones not counted
+}
+
+export interface DupeGroup {
+  sha256: string;
+  name: string; // the newest copy's name
+  otherNames: string[]; // other names the copies have
+  size: number; // of one copy
+  copies: number;
+  extraBytes: number; // the space the extra copies use
 }

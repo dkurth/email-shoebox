@@ -13,6 +13,7 @@ export type DeleteFilter = Omit<ReportQuery, "sort" | "desc" | "page">;
 
 export interface DeleteTarget {
   ids?: unknown; // attachment ids
+  sha256s?: unknown; // or: every copy of these files
   filter?: DeleteFilter; // or: everything the report filter matches
 }
 
@@ -28,6 +29,22 @@ function doomed(db: DB, t: DeleteTarget): Doomed[] {
   if (t.filter) {
     const w = reportWhere({ ...t.filter, deleted: false });
     return db.prepare(`SELECT x.id, x.path, x.size_bytes, x.filename FROM attachments x WHERE ${w.sql} ORDER BY x.size_bytes DESC`).all(...w.params) as Doomed[];
+  }
+  if (t.sha256s !== undefined) {
+    if (!Array.isArray(t.sha256s) || !t.sha256s.length || t.sha256s.some((h) => typeof h !== "string" || !/^[0-9a-f]{64}$/.test(h))) {
+      throw new InputError("sha256s must be a list of SHA-256 hashes");
+    }
+    const hs = [...new Set(t.sha256s as string[])];
+    const out: Doomed[] = [];
+    for (let i = 0; i < hs.length; i += 500) {
+      const chunk = hs.slice(i, i + 500);
+      out.push(
+        ...(db
+          .prepare(`SELECT id, path, size_bytes, filename FROM attachments WHERE sha256 IN (${chunk.map(() => "?").join(",")}) AND deleted_at IS NULL`)
+          .all(...chunk) as Doomed[]),
+      );
+    }
+    return out.sort((a, b) => b.size_bytes - a.size_bytes);
   }
   if (!Array.isArray(t.ids) || !t.ids.length || t.ids.some((i) => !Number.isInteger(i))) throw new InputError("ids must be a list of attachment ids");
   const out: Doomed[] = [];
