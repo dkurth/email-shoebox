@@ -218,3 +218,25 @@ for (const colorScheme of ["light", "dark"] as const) {
     expect(await bg(chip)).toBe(swatch);
   });
 }
+
+test("the moon button switches dark mode on and off, and the choice is remembered", async ({ page }) => {
+  server = await startServer();
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.goto(server.url);
+  const moon = page.getByRole("button", { name: "Dark mode" });
+  const bodyBg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  await expect(moon).toHaveAttribute("aria-pressed", "false"); // follows the system at first
+  const light = await bodyBg();
+  await moon.click();
+  await expect(moon).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  expect(await bodyBg()).not.toBe(light);
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark"); // remembered
+  await expect(moon).toHaveAttribute("aria-pressed", "true");
+  await moon.click();
+  await expect(moon).toHaveAttribute("aria-pressed", "false");
+  expect(await bodyBg()).toBe(light);
+  await page.emulateMedia({ colorScheme: "dark" }); // a chosen theme ignores the system setting
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+});

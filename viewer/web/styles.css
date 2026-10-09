@@ -16,25 +16,25 @@
   --toast: #323232;
   color-scheme: light;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #1f1f1f;
-    --panel: #282828;
-    --text: #e3e3e3;
-    --muted: #a8a8a8;
-    --line: #3c3c3c;
-    --hover: #333;
-    --active: #004a77;
-    --accent: #a8c7fa;
-    --row-read: #262626;
-    --row-unread: #2f2f2f;
-    --selected: #0b3d69;
-    --chip: #444;
-    --danger: #f2b8b5;
-    --toast: #e3e3e3;
-    color-scheme: dark;
-  }
+/* Dark mode: web/theme.ts sets data-theme on <html> (the moon button, else the system setting). */
+:root[data-theme="dark"] {
+  --bg: #1f1f1f;
+  --panel: #282828;
+  --text: #e3e3e3;
+  --muted: #a8a8a8;
+  --line: #3c3c3c;
+  --hover: #333;
+  --active: #004a77;
+  --accent: #a8c7fa;
+  --row-read: #262626;
+  --row-unread: #2f2f2f;
+  --selected: #0b3d69;
+  --chip: #444;
+  --danger: #f2b8b5;
+  --toast: #e3e3e3;
+  color-scheme: dark;
 }
+
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
 body { background: var(--bg); color: var(--text); font: 14px/1.4 "Google Sans", Roboto, Arial, sans-serif; }
@@ -67,6 +67,7 @@ a { color: var(--accent); }
 .icon-button { border: 0; background: none; border-radius: 50%; min-width: 36px; height: 36px; cursor: pointer; font-size: 18px; }
 .icon-button:hover:not(:disabled) { background: var(--hover); }
 .icon-button:disabled { opacity: 0.35; cursor: default; }
+.icon-button[aria-pressed="true"] { background: var(--active); }
 .text-button { border: 1px solid var(--line); background: var(--panel); border-radius: 18px; padding: 6px 14px; cursor: pointer; }
 .text-button:hover:not(:disabled) { background: var(--hover); }
 .text-button.danger { color: var(--danger); }

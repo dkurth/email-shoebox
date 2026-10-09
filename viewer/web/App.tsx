@@ -25,6 +25,7 @@ import { ThreadList } from "./ThreadList.tsx";
 import { ThreadView } from "./ThreadView.tsx";
 import { Toast, type ToastData } from "./Toast.tsx";
 import { ChosenColorsContext, LabelOptions } from "./LabelOptions.tsx";
+import { useTheme } from "./theme.ts";
 
 type After = "stay" | "list" | "next";
 
@@ -49,6 +50,7 @@ export function App() {
   const [confirm, setConfirm] = useState<ConfirmData | null>(null);
   const [toast, setToast] = useState<ToastData | null>(null);
   const lastUndo = useRef<(() => void) | null>(null);
+  const [dark, toggleDark] = useTheme();
 
   const readOnly = session?.readOnly ?? true;
 
@@ -373,6 +375,9 @@ export function App() {
           {session && <span className="archive-path" title={session.archiveDir}>{session.archiveDir}</span>}
           {session?.readOnly && <span className="badge">read-only</span>}
           <span className="spacer" />
+          <button className="icon-button" aria-label="Dark mode" aria-pressed={dark} title={dark ? "Dark mode is on" : "Dark mode is off"} onClick={toggleDark}>
+            🌙
+          </button>
           <button className="icon-button" title="Keyboard shortcuts (?)" onClick={() => setHelp(true)}>
             ⌨️
           </button>

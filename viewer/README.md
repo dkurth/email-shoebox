@@ -55,6 +55,9 @@ Options (after `--`):
   and recipients; ▾ shows From/To/Cc/Bcc/Date. "Show original" shows the
   headers and decoded parts. **Click an attachment to download it.**
 - **Opening a conversation marks it read.**
+- **Dark mode:** the 🌙 button at the top right turns dark mode on and off
+  (highlighted when on). Your choice is remembered in this browser. Until you
+  click it, the viewer follows your system setting.
 - **Undo:** after archive, trash or a label change, a message at the bottom
   left offers **Undo** (or press `z`). Star and unstar show no message: the
   star icon (in the list, and next to the subject of an open conversation)

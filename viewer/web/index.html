@@ -4,6 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Mail archive</title>
+    <script>
+      // Set the theme before the first paint, so dark mode doesn't flash light. See web/theme.ts.
+      (function () {
+        var t = null;
+        try { t = localStorage.getItem("theme"); } catch (e) {}
+        if (t !== "dark" && t !== "light") t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        document.documentElement.dataset.theme = t;
+      })();
+    </script>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23c5221f' d='M2 6l10 7 10-7v12H2z'/><path fill='%23ea4335' d='M2 6h20l-10 7z'/></svg>" />
   </head>
   <body>
