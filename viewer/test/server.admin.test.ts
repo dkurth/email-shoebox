@@ -20,9 +20,9 @@ describe("admin overview", () => {
     expect(o.dbBytes).toBeGreaterThan(0);
     expect(o.parseErrorCount).toBe(0);
     expect(o.notes).toBe(0);
-    expect(o.topSenders[0]).toMatchObject({ addr: "news@shop.example", name: "Deals", count: 57 });
+    expect(o.topSenders[0]).toMatchObject({ addr: "news@shop.example", name: "Deals", count: 56 }); // not "Old coupon" (in Trash)
     expect(o.topSenders.map((p) => p.addr)).not.toContain("me@example.com");
-    expect(o.topSenders.map((p) => p.addr)).toEqual(["news@shop.example", "alice@example.com", "bob@example.com", "carol@example.com", "club@hikers.example", "oma@example.de", "win@spam.example"]); // your own mail and the chat are left out
+    expect(o.topSenders.map((p) => p.addr)).toEqual(["news@shop.example", "alice@example.com", "bob@example.com", "carol@example.com", "club@hikers.example", "oma@example.de"]); // your own mail, the chat, Trash and Spam are left out
   });
 
   it("lists parse errors and deleted attachments", async () => {
@@ -74,7 +74,7 @@ describe("admin people", () => {
   it("lists people I received from, with attachments, without me or chats", async () => {
     const ctx = setup();
     const r = await people(ctx, "dir=received");
-    expect(r.total).toBe(7);
+    expect(r.total).toBe(6); // not win@spam.example (only in Spam)
     const carol = r.rows.find((p) => p.addr === "carol@example.com")!;
     expect(carol).toMatchObject({ count: 3, name: "Carol Chen", attachments: 8 });
     expect(r.rows.map((p) => p.addr)).not.toContain("dana@example.com");
@@ -90,10 +90,32 @@ describe("admin people", () => {
     const byBytes = await people(ctx, "dir=received&sort=attachmentBytes");
     expect(byBytes.rows[0].addr).toBe("carol@example.com");
     const domains = await people(ctx, "dir=received&domain=1");
-    expect(domains.rows.find((p) => p.addr === "example.com")).toMatchObject({ addresses: 3, count: 11 });
+    expect(domains.rows.find((p) => p.addr === "example.com")).toMatchObject({ addresses: 3, count: 10 }); // not Alice's trashed reply in "Mixed thread"
     expect((await people(ctx, "dir=received&page=2")).rows).toEqual([]);
     expect((await ctx.get("/api/admin/people?dir=both")).status).toBe(400);
     expect((await ctx.get("/api/admin/people?dir=sent&sort=evil")).status).toBe(400);
+  });
+
+  it("leaves out mail in Trash and Spam", async () => {
+    const ctx = setup();
+    // Move every message from or to Carol to Trash, and one hike-club message to Spam.
+    const carol = ctx.db
+      .prepare("SELECT DISTINCT m.thread_id FROM messages m JOIN message_addresses a ON a.message_id = m.id WHERE a.addr = 'carol@example.com'")
+      .pluck()
+      .all() as string[];
+    await ctx.post("/api/threads/modify", { view: "all", threadIds: carol, add: ["Trash"], remove: [] });
+    const hike = ctx.db.prepare("SELECT thread_id FROM messages WHERE subject = 'Trail report'").pluck().get() as string;
+    await ctx.post("/api/threads/modify", { view: "all", threadIds: [hike], add: ["Spam"], remove: [] });
+
+    const received = await people(ctx, "dir=received");
+    expect(received.rows.map((p) => p.addr)).not.toContain("carol@example.com");
+    const top = ((await ctx.get("/api/admin/overview")).body as AdminOverview).topSenders.map((p) => p.addr);
+    expect(top).not.toContain("carol@example.com");
+    expect((await people(ctx, "dir=sent")).rows.map((p) => p.addr)).not.toContain("carol@example.com");
+    const lists = (await ctx.get("/api/admin/lists")).body as { rows: import("../shared/types.ts").AdminList[] };
+    expect(lists.rows[0]).toMatchObject({ messages: 1, unread: 0 });
+    const p = (await ctx.get("/api/admin/person?addr=carol@example.com")).body as import("../shared/types.ts").AdminPersonDetail;
+    expect(p).toMatchObject({ messages: 0, years: [], labels: [], attachments: [] });
   });
 
   it("lists mailing lists", async () => {

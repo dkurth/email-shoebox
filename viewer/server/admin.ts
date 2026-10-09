@@ -151,13 +151,21 @@ export interface PeopleQuery {
 export const PEOPLE_PAGE = 100;
 
 /**
+ * Messages in Trash or Spam. People, mailing lists and the person page leave them out, as All Mail
+ * and search do: mail you threw away shouldn't count. (The label ids are integers from the database.)
+ */
+function trashOrSpam(db: DB): string {
+  return `SELECT message_id FROM message_labels WHERE label_id IN (${labelId(db, "Trash") ?? -1}, ${labelId(db, "Spam") ?? -1})`;
+}
+
+/**
  * "People I sent to": the To/Cc/Bcc addresses of messages with the Sent label.
  * "People I received from": the senders of messages without it (your own addresses left out).
  */
 export function people(db: DB, me: string[], pq: PeopleQuery): { rows: AdminPerson[]; total: number } {
   const sent = labelId(db, "Sent") ?? -1;
   const chat = labelId(db, "Chat") ?? -1;
-  const where: string[] = [];
+  const where: string[] = [`a.message_id NOT IN (${trashOrSpam(db)})`];
   const params: unknown[] = [];
   if (pq.dir === "sent") {
     where.push("a.role IN ('to', 'cc', 'bcc')", "a.message_id IN (SELECT message_id FROM message_labels WHERE label_id = ?)");
@@ -245,7 +253,8 @@ export function lists(db: DB, lq: ListsQuery): { rows: AdminList[]; total: numbe
   const sortCol = { messages: "n", unread: "unread", first: "first", last: "last", bytes: "bytes", name: "lower(coalesce(name, list_id))" }[lq.sort ?? "messages"] ?? "n";
   const sql = `
     WITH lm AS MATERIALIZED (
-      SELECT id, list_id, list_name, coalesce(received_utc, date_utc) AS d, size_bytes FROM messages INDEXED BY messages_list WHERE list_id IS NOT NULL),
+      SELECT id, list_id, list_name, coalesce(received_utc, date_utc) AS d, size_bytes FROM messages INDEXED BY messages_list
+      WHERE list_id IS NOT NULL AND id NOT IN (${trashOrSpam(db)})),
     names AS (SELECT list_id, list_name AS name FROM (
       SELECT list_id, list_name, row_number() OVER (PARTITION BY list_id ORDER BY count(*) DESC, list_name) AS rn
       FROM lm WHERE list_name IS NOT NULL GROUP BY list_id, list_name) WHERE rn = 1),
@@ -274,13 +283,14 @@ export function lists(db: DB, lq: ListsQuery): { rows: AdminList[]; total: numbe
 export function person(db: DB, addr: string): AdminPersonDetail {
   const a = addr.trim().toLowerCase();
   const sent = labelId(db, "Sent") ?? -1;
+  const hidden = trashOrSpam(db);
   const names = db
-    .prepare("SELECT name, count(*) AS n FROM message_addresses WHERE addr = ? AND name != '' GROUP BY name ORDER BY n DESC LIMIT 10")
+    .prepare(`SELECT name, count(*) AS n FROM message_addresses WHERE addr = ? AND name != '' AND message_id NOT IN (${hidden}) GROUP BY name ORDER BY n DESC LIMIT 10`)
     .all(a) as { name: string; n: number }[];
   // Each message with this address, its date (from the thread index) and whether it was received or sent.
   const rows = db
     .prepare(
-      `WITH mine AS MATERIALIZED (SELECT DISTINCT message_id FROM message_addresses WHERE addr = ?),
+      `WITH mine AS MATERIALIZED (SELECT DISTINCT message_id FROM message_addresses WHERE addr = ? AND message_id NOT IN (${hidden})),
        received AS MATERIALIZED (SELECT DISTINCT message_id FROM message_addresses WHERE addr = ? AND role = 'from'),
        sentTo AS MATERIALIZED (SELECT DISTINCT message_id FROM message_addresses WHERE addr = ? AND role IN ('to', 'cc', 'bcc')
                                AND message_id IN (SELECT message_id FROM message_labels WHERE label_id = ?))
@@ -295,7 +305,8 @@ export function person(db: DB, addr: string): AdminPersonDetail {
     db
       .prepare(
         `SELECT l.name, count(*) AS n FROM message_labels ml JOIN labels l ON l.id = ml.label_id
-         WHERE ml.message_id IN (SELECT message_id FROM message_addresses WHERE addr = ?) GROUP BY l.id ORDER BY n DESC, l.name`,
+         WHERE ml.message_id IN (SELECT message_id FROM message_addresses WHERE addr = ?) AND ml.message_id NOT IN (${hidden})
+         GROUP BY l.id ORDER BY n DESC, l.name`,
       )
       .all(a) as { name: string; n: number }[]
   )
@@ -307,7 +318,7 @@ export function person(db: DB, addr: string): AdminPersonDetail {
               coalesce(m.received_utc, m.date_utc) AS date, m.subject
        FROM attachments x JOIN messages m ON m.id = x.message_id
        WHERE x.message_id IN (SELECT message_id FROM message_addresses WHERE addr = ? AND role = 'from')
-         AND x.is_inline = 0 AND x.deleted_at IS NULL
+         AND x.message_id NOT IN (${hidden}) AND x.is_inline = 0 AND x.deleted_at IS NULL
        ORDER BY x.size_bytes DESC LIMIT 10`,
     )
     .all(a) as AdminPersonDetail["attachments"];
