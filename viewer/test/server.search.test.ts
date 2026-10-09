@@ -204,3 +204,31 @@ describe("actions on search results", () => {
     expect(mine.body.threads).toBe(4);
   });
 });
+
+describe("context snippets", () => {
+  it("shows the text around the first match in the body", async () => {
+    const r = await search("lighthouse");
+    expect(r.threads[0].snippet).toMatch(/^…\S.* the old lighthouse on the cape, .*$/);
+    expect(r.threads[0].snippet.length).toBeLessThanOrEqual(202);
+    expect(r.threads[0].snippet.indexOf("lighthouse")).toBeGreaterThan(20);
+    expect((await search("lighth*")).threads[0].snippet).toContain("lighthouse");
+  });
+
+  it("keeps the normal snippet for a match only in the subject, and uses text made from HTML", async () => {
+    const c = setup();
+    const s = async (q: string) => ((await c.get(`/api/search?q=${encodeURIComponent(q)}`)).body as SearchResult).threads[0]?.snippet;
+    expect(await s("subject:pancake")).toBe("Flour, eggs, milk.");
+    expect(await s("planning")).toBe("Count me in. From Bob"); // only in the subject: the normal snippet
+    c.db.prepare("UPDATE messages SET body_text = NULL, body_html = ? WHERE subject = 'Pancake recipe'")
+      .run("<html><head><style>p{}</style></head><body><p>Mix the <b>flour</b>&nbsp;&amp; eggs.</p></body></html>");
+    expect(await s("eggs")).toBe("Mix the flour & eggs.");
+  });
+
+  it("uses the note when only the note matches", async () => {
+    const c = setup();
+    const t = c.db.prepare("SELECT thread_id FROM messages WHERE subject = 'Pancake recipe'").pluck().get() as string;
+    await c.post(`/api/threads/${t}/note`, { body: "Remember: grandma adds cinnamon.", expectedUpdatedAt: null }, "PUT");
+    const r = (await c.get("/api/search?q=cinnamon")).body as SearchResult;
+    expect(r.threads[0].snippet).toBe("Note: Remember: grandma adds cinnamon.");
+  });
+});

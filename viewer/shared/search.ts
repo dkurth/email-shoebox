@@ -332,6 +332,27 @@ export function findMatches(text: string, terms: HighlightTerm[]): [number, numb
   return merged;
 }
 
+/**
+ * The text around the first match: about `before` characters before it and `max` in all, cut at
+ * word boundaries, whitespace collapsed, "…" at a cut end. null if nothing matches.
+ */
+export function contextSnippet(text: string, terms: HighlightTerm[], max = 200, before = 60): string | null {
+  const flat = text.replace(/\s+/g, " ").trim();
+  const first = findMatches(flat, terms)[0];
+  if (!first) return null;
+  let start = Math.max(0, first[0] - before);
+  if (start > 0) {
+    const space = flat.indexOf(" ", start);
+    start = space >= 0 && space < first[0] ? space + 1 : first[0];
+  }
+  let end = Math.min(flat.length, start + max);
+  if (end < flat.length) {
+    const space = flat.lastIndexOf(" ", end);
+    if (space > first[1]) end = space;
+  }
+  return (start > 0 ? "…" : "") + flat.slice(start, end) + (end < flat.length ? "…" : "");
+}
+
 // ------------------------------------------------------------------ help
 
 export interface HelpRow {

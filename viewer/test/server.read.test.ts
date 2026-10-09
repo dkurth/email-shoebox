@@ -67,11 +67,11 @@ describe("thread list", () => {
     const { get } = setup();
     const p1 = (await get("/api/threads?view=all")).body as ThreadList;
     const p2 = (await get("/api/threads?view=all&page=2")).body as ThreadList;
-    expect(p1.total).toBe(70); // 72 threads minus the Spam thread and the Trash-only thread
+    expect(p1.total).toBe(71); // 73 threads minus the Spam thread and the Trash-only thread
     expect(p1.threads).toHaveLength(50);
-    expect(p2.threads).toHaveLength(20);
+    expect(p2.threads).toHaveLength(21);
     const p9 = (await get("/api/threads?view=all&page=9")).body as ThreadList;
-    expect(p9).toMatchObject({ total: 70, threads: [] });
+    expect(p9).toMatchObject({ total: 71, threads: [] });
   });
 
   it("rejects unknown views and bad pages", async () => {

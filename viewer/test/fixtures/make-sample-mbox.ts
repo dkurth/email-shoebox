@@ -135,6 +135,11 @@ thread([{ from: LIST, to: ME, subject: "Saturday hike", labels: ["Archived", "Op
 thread([{ from: LIST, to: ME, subject: "Trail report", labels: ["Archived", "Unread"], text: "Muddy but fine.\n",
           headers: ["List-Id: Hike Club Announcements <announce.hikers.example>"] }]);
 
+// A long letter: the word "lighthouse" is far down (search snippets show the text around it).
+thread([{ from: CAROL, to: ME, subject: "Long letter", labels: ["Archived", "Opened"],
+          text: "Dear Pat,\n\n" + "This paragraph talks about nothing in particular, to fill the space before the point. ".repeat(8) +
+                "We finally visited the old lighthouse on the cape, and the view was wonderful.\n\nLove, Carol\n" }]);
+
 // Filler next, so the interesting threads are the newest.
 for (let i = 1; i <= 55; i++) {
   thread([{ from: SHOP, to: ME, subject: `Weekly deals #${i}`, labels: ["Archived", "Opened", "Category Promotions", "Newsletters"], text: `Deal number ${i}.\n` }]);

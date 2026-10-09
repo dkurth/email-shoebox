@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { OPERATORS, SEARCH_HELP, findMatches, fold, highlightTerms, parseQuery, searchContext, type Node } from "../shared/search.ts";
+import { OPERATORS, SEARCH_HELP, contextSnippet, findMatches, fold, highlightTerms, parseQuery, searchContext, type Node } from "../shared/search.ts";
 
 const w = (text: string, prefix = false): Node => ({ text, phrase: false, prefix });
 const ph = (text: string, prefix = false): Node => ({ text, phrase: true, prefix });
@@ -121,5 +121,17 @@ describe("SEARCH_HELP", () => {
       const written = [...r.example.matchAll(/(?:^|[\s({-])([a-z_0-9]+):/g)].map((m) => m[1]);
       expect([...new Set(ops(parseQuery(r.example)))].sort(), r.example).toEqual([...new Set(written)].sort());
     }
+  });
+});
+
+describe("contextSnippet", () => {
+  const t = (text: string) => [{ text, prefix: false }];
+  it("cuts at word boundaries with … at a cut end", () => {
+    const text = "one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen";
+    expect(contextSnippet(text, t("nine"), 30, 10)).toBe("…eight nine ten eleven twelve…");
+    expect(contextSnippet(text, t("one"), 20, 10)).toBe("one two three four…");
+    expect(contextSnippet("short text", t("text"))).toBe("short text");
+    expect(contextSnippet("a\n\n  b   c", t("c"))).toBe("a b c");
+    expect(contextSnippet("nothing here", t("zebra"))).toBeNull();
   });
 });

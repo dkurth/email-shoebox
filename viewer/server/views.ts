@@ -242,7 +242,14 @@ export function listThreads(db: DB, view: View, page: number, me: string[]): Thr
  * inView: which messages count as "in the view" (the snippet and date come from the newest of them);
  * default: messages with the view's label.
  */
-export function summarizeThreads(db: DB, view: View, page: number, p: PageRows, me: string[], opts: { inView?: Sql } = {}): ThreadList {
+export function summarizeThreads(
+  db: DB,
+  view: View,
+  page: number,
+  p: PageRows,
+  me: string[],
+  opts: { inView?: Sql; snippet?: (messageId: number, threadId: string) => string | null } = {},
+): ThreadList {
   const { rows: pageRows, total } = p;
   const ids = pageRows.map((r) => r.thread_id);
   if (!ids.length) return { view, page, pageSize: PAGE_SIZE, total, threads: [] };
@@ -296,7 +303,7 @@ export function summarizeThreads(db: DB, view: View, page: number, p: PageRows, 
     return {
       threadId: thread_id,
       subject: msgs.find((m) => m.subject)?.subject ?? "",
-      snippet: isNotesView(view) ? notes.get(thread_id) ?? "" : newest?.snippet ?? "",
+      snippet: isNotesView(view) ? notes.get(thread_id) ?? "" : (newest && opts.snippet?.(newest.id, thread_id)) ?? newest?.snippet ?? "",
       date: (last ?? newest?.d) || null,
       participants,
       toPrefix,

@@ -399,3 +399,11 @@ test("search: the ⓘ button shows the search options", async ({ page }) => {
   await page.locator(".search-help .example", { hasText: "is:starred" }).click();
   await expect(subjects(page)).toHaveText(["Pancake recipe"]);
 });
+
+test("search: the snippet shows the text around a match deep in a long message", async ({ page }) => {
+  server = await startServer();
+  await page.goto(server.url + "#/search/lighthouse");
+  const snippet = page.locator(".thread-row .snippet");
+  await expect(snippet).toContainText("the old lighthouse on the cape");
+  await expect(snippet.locator("mark.hl")).toHaveText(["lighthouse"]);
+});

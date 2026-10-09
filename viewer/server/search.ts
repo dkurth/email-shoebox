@@ -5,7 +5,8 @@
 // become INTERSECT, UNION and EXCEPT. So no search ever reads the wide message rows; only the
 // ids that match are looked up, to group them into threads.
 import { isUserLabel } from "../shared/labels.ts";
-import { highlightTerms, isEmptyQuery, parseQuery, searchContext, type HighlightTerm, type Node } from "../shared/search.ts";
+import { contextSnippet, highlightTerms, isEmptyQuery, parseQuery, searchContext, type HighlightTerm, type Node } from "../shared/search.ts";
+import { htmlToText } from "./text.ts";
 import type { ThreadList } from "../shared/types.ts";
 import type { DB } from "./db.ts";
 import { PAGE_SIZE, summarizeThreads, type PageRows } from "./views.ts";
@@ -314,7 +315,11 @@ export function searchThreads(db: DB, query: string, page: number, me: string[])
   const p: PageRows = { rows, total };
   const view = `search:${query}`;
   // The snippet and date come from the newest matching message of each thread.
-  const list = summarizeThreads(db, view, page, p, me, { inView: { sql: `m.id IN (${hits.sql})`, params: hits.params } });
+  const terms = highlightTerms(node);
+  const list = summarizeThreads(db, view, page, p, me, {
+    inView: { sql: `m.id IN (${hits.sql})`, params: hits.params },
+    snippet: terms.length ? matchSnippet(db, terms) : undefined,
+  });
   let hiddenInTrashOrSpam = 0;
   if (!total && !isEmptyQuery(node) && searchContext(node) === "normal") {
     const b = new SetBuilder();
@@ -323,7 +328,28 @@ export function searchThreads(db: DB, query: string, page: number, me: string[])
     const q = b.build(`SELECT count(*) FROM (SELECT id FROM (${all}) INTERSECT ${hidden})`);
     hiddenInTrashOrSpam = db.prepare(q.sql).pluck().get(...q.params) as number;
   }
-  return { ...list, highlight: highlightTerms(node), hiddenInTrashOrSpam };
+  return { ...list, highlight: terms, hiddenInTrashOrSpam };
+}
+
+const BODY_CAP = 500_000; // the same cap as the search index
+
+/**
+ * Context snippets: the text around the first match in the message body. A match only in the
+ * thread's note gives "Note: …"; a match only in the subject or people keeps the normal snippet.
+ * Reads the bodies of the (at most 50) messages on the page.
+ */
+function matchSnippet(db: DB, terms: HighlightTerm[]) {
+  const body = db.prepare(`SELECT substr(body_text, 1, ${BODY_CAP}) AS text, substr(body_html, 1, ${BODY_CAP}) AS html FROM messages WHERE id = ?`);
+  const note = db.prepare("SELECT body FROM thread_notes WHERE thread_id = ?").pluck();
+  return (messageId: number, threadId: string): string | null => {
+    const r = body.get(messageId) as { text: string | null; html: string | null } | undefined;
+    const text = r?.text ?? (r?.html ? htmlToText(r.html) : "");
+    const inBody = contextSnippet(text, terms);
+    if (inBody) return inBody;
+    const n = note.get(threadId) as string | undefined;
+    const inNote = n ? contextSnippet(n, terms, 190) : null;
+    return inNote ? `Note: ${inNote}` : null;
+  };
 }
 
 /** Every thread that matches (for "select all N conversations" in search results). */
