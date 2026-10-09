@@ -286,7 +286,11 @@ mark.hl { background: #fde293; color: inherit; border-radius: 2px; }
 .sort-button:hover { color: var(--text); }
 .admin-options { display: flex; gap: 20px; font-size: 13px; color: var(--muted); }
 .admin-options label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
-.people-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(560px, 1fr)); gap: 0 32px; }
+.people-tabs { display: flex; gap: 4px; margin-bottom: 12px; }
+.people-tabs button { border: 1px solid var(--line); background: var(--panel); color: var(--muted); border-radius: 18px; padding: 6px 16px; cursor: pointer; font: inherit; }
+.people-tabs button:hover { background: var(--hover); }
+.people-tabs button.active { background: var(--active); color: var(--text); border-color: transparent; font-weight: 500; }
+.admin-body h2.table-head { margin-top: 12px; }
 .table-filter { font: inherit; font-size: 13px; font-weight: 400; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); width: 200px; }
 .admin-body h2 .pager { margin-left: auto; font-weight: 400; }
 .muted-small { color: var(--muted); font-size: 12px; }
@@ -297,7 +301,6 @@ mark.hl { background: #fde293; color: inherit; border-radius: 2px; }
 .person-links { display: flex; gap: 8px; margin: 16px 0; flex-wrap: wrap; }
 .person-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 0 32px; }
 .back-link { font-size: 13px; }
-@media (max-width: 800px) { .people-grid { grid-template-columns: 1fr; } }
 .summary-total { display: flex; align-items: baseline; gap: 24px; flex-wrap: wrap; }
 .summary-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 0 32px; }
 .admin-table .sub-row td { color: var(--muted); font-size: 12px; padding-left: 20px; }

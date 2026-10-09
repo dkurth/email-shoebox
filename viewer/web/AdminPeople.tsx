@@ -1,6 +1,6 @@
 // The admin page's People tab: who you sent to, who you received from, and mailing lists.
 // Plus the page for one person (#/admin/person?addr=…).
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { AdminList, AdminPerson, AdminPersonDetail } from "../shared/types.ts";
 import { q as query } from "./api.ts";
 import { fullDate, size } from "./format.ts";
@@ -48,8 +48,7 @@ function PeopleTable({ dir, chats, byDomain }: { dir: "sent" | "received"; chats
   const domainSearch = (d: string) => search(dir === "sent" ? `in:sent to:@${d}` : `from:@${d}`);
   return (
     <section className="people-table">
-      <h2>
-        {dir === "sent" ? "People I sent to" : "People I received from"}
+      <h2 className="table-head">
         <input
           className="table-filter"
           placeholder={byDomain ? "Filter domains" : "Filter by address or name"}
@@ -179,11 +178,40 @@ function ListsTable() {
   );
 }
 
+const DIR_KEY = "admin.people.dir";
+
+function savedDir(): "sent" | "received" {
+  try {
+    return localStorage.getItem(DIR_KEY) === "received" ? "received" : "sent";
+  } catch {
+    return "sent"; // storage blocked (private window): the default
+  }
+}
+
 export function PeopleTab({ params, setParams }: AdminProps) {
   const chats = params.get("chats") === "1";
   const byDomain = params.get("domain") === "1";
+  // The URL wins (links such as "See all" set it); else the tab you used last time.
+  const fromUrl = params.get("dir");
+  const dir = fromUrl === "sent" || fromUrl === "received" ? fromUrl : savedDir();
+  useEffect(() => {
+    try {
+      localStorage.setItem(DIR_KEY, dir);
+    } catch {
+      /* not remembered: fine */
+    }
+  }, [dir]);
+  const tab = (d: "sent" | "received", label: string) => (
+    <button role="tab" aria-selected={dir === d} className={dir === d ? "active" : undefined} onClick={() => setParams({ dir: d })}>
+      {label}
+    </button>
+  );
   return (
     <div className="admin-people">
+      <div className="people-tabs" role="tablist" aria-label="People">
+        {tab("sent", "People I sent to")}
+        {tab("received", "People I received from")}
+      </div>
       <div className="admin-options">
         <label>
           <input type="checkbox" checked={byDomain} onChange={(e) => setParams({ domain: e.target.checked ? 1 : null })} /> Group by domain
@@ -192,10 +220,7 @@ export function PeopleTab({ params, setParams }: AdminProps) {
           <input type="checkbox" checked={chats} onChange={(e) => setParams({ chats: e.target.checked ? 1 : null })} /> Include chats
         </label>
       </div>
-      <div className="people-grid">
-        <PeopleTable key={`s${chats}${byDomain}`} dir="sent" chats={chats} byDomain={byDomain} />
-        <PeopleTable key={`r${chats}${byDomain}`} dir="received" chats={chats} byDomain={byDomain} />
-      </div>
+      <PeopleTable key={`${dir}${chats}${byDomain}`} dir={dir} chats={chats} byDomain={byDomain} />
       <ListsTable />
     </div>
   );

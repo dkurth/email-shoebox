@@ -433,7 +433,11 @@ test("admin: opens from the top bar and with g z; tabs; a top sender runs a sear
 test("admin People: tables, group by domain, a person's page, a mailing list", async ({ page }) => {
   server = await startServer();
   await page.goto(server.url + "#/admin/people");
-  const received = page.locator(".people-table", { hasText: "People I received from" });
+  await expect(page.getByRole("tab", { name: "People I sent to" })).toHaveAttribute("aria-selected", "true"); // the first time
+  await page.getByRole("tab", { name: "People I received from" }).click();
+  await expect(page).toHaveURL(/dir=received/);
+  await expect(page.locator(".people-table")).toHaveCount(1); // one table at a time, full width
+  const received = page.locator(".people-table");
   await expect(received.locator("tbody tr").first()).toContainText("news@shop.example");
   await received.getByRole("textbox").fill("chen");
   await expect(received.locator("tbody tr")).toHaveCount(1);
@@ -444,11 +448,12 @@ test("admin People: tables, group by domain, a person's page, a mailing list", a
   await page.getByRole("button", { name: "Mail you sent them" }).click();
   await expect(subjects(page)).toHaveText(["Question about the invoice"]);
 
-  await page.goto(server.url + "#/admin/people");
+  await page.goto(server.url + "#/admin/people"); // no dir in the URL: the tab used last time
+  await expect(page.getByRole("tab", { name: "People I received from" })).toHaveAttribute("aria-selected", "true");
   await page.getByLabel("Group by domain").click(); // the URL changes, then the box shows the change
   await expect(page.getByLabel("Group by domain")).toBeChecked();
   await expect(page).toHaveURL(/domain=1/);
-  const rows = page.locator(".people-table", { hasText: "People I received from" }).locator("tbody tr");
+  const rows = page.locator(".people-table tbody tr");
   await expect(rows.first()).toContainText("@shop.example");
   await expect(rows.filter({ hasText: "@example.com" })).toContainText("3 addresses");
   await page.locator("section", { hasText: "Mailing lists" }).locator("a", { hasText: "Hike Club Announcements" }).click();
