@@ -280,6 +280,8 @@ mark.hl { background: #fde293; color: inherit; border-radius: 2px; }
 .admin-table th { text-align: left; font-weight: 500; color: var(--muted); border-bottom: 1px solid var(--line); padding: 6px 10px 6px 0; white-space: nowrap; }
 .admin-table td { border-bottom: 1px solid var(--line); padding: 6px 10px 6px 0; vertical-align: top; }
 .admin-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* Numbers are right-aligned, text left-aligned: give a text column after a number column the same gap the numbers have. */
+.admin-table .num + :not(.num) { padding-left: 40px; }
 .admin-table tr.warn-row td { color: var(--danger); }
 .admin-table .mono { font: 12px ui-monospace, monospace; white-space: pre-wrap; }
 .sort-button { border: 0; background: none; padding: 0; cursor: pointer; color: inherit; font: inherit; }
