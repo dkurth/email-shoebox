@@ -164,41 +164,28 @@ kbd { background: var(--chip); border-radius: 4px; padding: 1px 6px; font: 12px 
 .actions { display: flex; gap: 6px; flex-wrap: wrap; margin-left: 8px; }
 .trash-bar { background: var(--hover); padding: 10px 16px; display: flex; gap: 12px; justify-content: center; font-size: 13px; }
 
-/* Label colors (shared/labelColors.ts): chip background and text, and a strong color for squares. */
-.lc-red    { --lc-bg: #fbd3d0; --lc-fg: #8a1c1c; --lc-dot: #e66550; }
-.lc-orange { --lc-bg: #ffe0c2; --lc-fg: #844200; --lc-dot: #f6913e; }
-.lc-yellow { --lc-bg: #fdefb2; --lc-fg: #684f00; --lc-dot: #f2c230; }
-.lc-green  { --lc-bg: #ccebd6; --lc-fg: #0b5a2a; --lc-dot: #43b06a; }
-.lc-teal   { --lc-bg: #c5ebe6; --lc-fg: #04534a; --lc-dot: #2da89a; }
-.lc-cyan   { --lc-bg: #c9eaf5; --lc-fg: #035a73; --lc-dot: #3fa9d0; }
-.lc-blue   { --lc-bg: #d3e3fd; --lc-fg: #0b3d91; --lc-dot: #4a86e8; }
-.lc-indigo { --lc-bg: #dfdffb; --lc-fg: #2d2d8a; --lc-dot: #6c6cdc; }
-.lc-purple { --lc-bg: #ecd9f8; --lc-fg: #5b1a80; --lc-dot: #a35bd1; }
-.lc-pink   { --lc-bg: #fbd5e8; --lc-fg: #85154f; --lc-dot: #e06ba8; }
-.lc-brown  { --lc-bg: #ecdccf; --lc-fg: #5c3a1e; --lc-dot: #a8774f; }
-.lc-gray   { --lc-bg: #e3e5e8; --lc-fg: #3c4043; --lc-dot: #8a9099; }
-@media (prefers-color-scheme: dark) {
-  .lc-red    { --lc-bg: #5b2320; --lc-fg: #ffd8d3; }
-  .lc-orange { --lc-bg: #5c3410; --lc-fg: #ffdcbd; }
-  .lc-yellow { --lc-bg: #4f4210; --lc-fg: #fbeaa5; }
-  .lc-green  { --lc-bg: #1d4a2c; --lc-fg: #c6efd3; }
-  .lc-teal   { --lc-bg: #11463f; --lc-fg: #bfeee7; }
-  .lc-cyan   { --lc-bg: #0f4256; --lc-fg: #c3eaf7; }
-  .lc-blue   { --lc-bg: #1c3b6e; --lc-fg: #d3e3fd; }
-  .lc-indigo { --lc-bg: #2e2e66; --lc-fg: #dfdffb; }
-  .lc-purple { --lc-bg: #43255a; --lc-fg: #ecd9f8; }
-  .lc-pink   { --lc-bg: #5a1f3e; --lc-fg: #fbd5e8; }
-  .lc-brown  { --lc-bg: #47321f; --lc-fg: #efdccd; }
-  .lc-gray   { --lc-bg: #3c4043; --lc-fg: #e3e5e8; }
-}
-.chip.lc { background: var(--lc-bg); color: var(--lc-fg); }
-.label-square { display: inline-block; width: 12px; height: 12px; border-radius: 3px; background: var(--lc-dot); vertical-align: middle; }
+/* Label colors (shared/labelColors.ts). One color per label, used as is for the picker swatch,
+   the sidebar square and the chip, so all three match; --lc-text keeps chip text readable (>= 4.5:1). */
+.lc-red    { --lc: #d93025; --lc-text: #fff; }
+.lc-orange { --lc: #f29437; --lc-text: #1f1f1f; }
+.lc-yellow { --lc: #f5c518; --lc-text: #1f1f1f; }
+.lc-green  { --lc: #188038; --lc-text: #fff; }
+.lc-teal   { --lc: #0f7b70; --lc-text: #fff; }
+.lc-cyan   { --lc: #4cb8dc; --lc-text: #1f1f1f; }
+.lc-blue   { --lc: #1a73e8; --lc-text: #fff; }
+.lc-indigo { --lc: #5b5fc7; --lc-text: #fff; }
+.lc-purple { --lc: #8e44ad; --lc-text: #fff; }
+.lc-pink   { --lc: #c2185b; --lc-text: #fff; }
+.lc-brown  { --lc: #8d6e63; --lc-text: #fff; }
+.lc-gray   { --lc: #5f6368; --lc-text: #fff; }
+.chip.lc { background: var(--lc); color: var(--lc-text); }
+.label-square { display: inline-block; width: 12px; height: 12px; border-radius: 3px; background: var(--lc); vertical-align: middle; }
 .nav-options { display: none; border: 0; background: none; cursor: pointer; color: var(--muted); margin-right: 8px; padding: 0 4px; font-size: 16px; line-height: 1; }
 .nav-item:hover .nav-options, .nav-options[aria-expanded="true"] { display: block; }
 .label-options { position: fixed; width: 228px; background: var(--panel); border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.3); padding: 12px; outline: none; }
 .label-options-title { font-weight: 500; margin-bottom: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .swatches { display: grid; grid-template-columns: repeat(6, 28px); gap: 8px; margin-bottom: 8px; }
-.swatch { width: 28px; height: 28px; border-radius: 50%; border: 0; background: var(--lc-dot); cursor: pointer; color: #fff; font-weight: 700; padding: 0; }
+.swatch { width: 28px; height: 28px; border-radius: 50%; border: 0; background: var(--lc); cursor: pointer; color: var(--lc-text); font-weight: 700; padding: 0; }
 .swatch.current { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--text); }
 .menu-item { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 6px 4px; border-radius: 4px; cursor: pointer; }
 .menu-item:hover:not(:disabled) { background: var(--hover); }

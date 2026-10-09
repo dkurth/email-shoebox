@@ -187,3 +187,20 @@ test("label colors: pick one in the sidebar menu; children follow; Default color
   await page.getByRole("button", { name: "Delete label", exact: true }).click();
   await expect(navItem("Projects")).toHaveCount(0);
 });
+
+for (const colorScheme of ["light", "dark"] as const) {
+  test(`label colors: swatch, sidebar square and chip are the same color (${colorScheme})`, async ({ page }) => {
+    server = await startServer();
+    await page.emulateMedia({ colorScheme });
+    await page.goto(server.url + "#/all");
+    const work = page.locator(".sidebar .nav-item").filter({ has: page.getByText("Work", { exact: true }) });
+    const bg = (l: import("@playwright/test").Locator) => l.evaluate((e) => getComputedStyle(e).backgroundColor);
+    await work.hover();
+    await work.getByRole("button", { name: "Options for label Work" }).click();
+    const swatch = await bg(page.locator(".swatch.current"));
+    await page.keyboard.press("Escape");
+    const chip = page.locator(".thread-row").filter({ hasText: "Quarterly report" }).locator(".chip", { hasText: "Work" });
+    expect(await bg(work.locator(".label-square"))).toBe(swatch);
+    expect(await bg(chip)).toBe(swatch);
+  });
+}
