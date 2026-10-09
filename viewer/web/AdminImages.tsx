@@ -29,6 +29,18 @@ export function ImagesTab({ params, setParams, readOnly }: AdminProps) {
   const images = data?.images ?? [];
   const start = (page - 1) * PAGE;
   const index = viewing === null ? null : Math.min(viewing, images.length - 1);
+  const toPage = (p: number) => {
+    setParams({ page: p > 1 ? p : null });
+    document.querySelector(".admin-body")?.scrollTo(0, 0); // a new page starts at the top
+  };
+  // The same pager above and below the grid.
+  const pager = data && (
+    <span className="pager">
+      {data.total ? `${num(start + 1)}–${num(Math.min(data.total, start + PAGE))} of ${num(data.total)}` : "No images match."}
+      <button className="icon-button" title="Newer" disabled={page <= 1} onClick={() => toPage(page - 1)}>‹</button>
+      <button className="icon-button" title="Older" disabled={start + PAGE >= data.total} onClick={() => toPage(page + 1)}>›</button>
+    </span>
+  );
   return (
     <div className="admin-images">
       {del.ui}
@@ -54,13 +66,7 @@ export function ImagesTab({ params, setParams, readOnly }: AdminProps) {
         <label>
           <input type="checkbox" checked={!small} onChange={(e) => setParams({ small: e.target.checked ? null : 1, page: null })} /> Hide images under 20 KB
         </label>
-        {data && (
-          <span className="pager">
-            {data.total ? `${num(start + 1)}–${num(Math.min(data.total, start + PAGE))} of ${num(data.total)}` : "No images match."}
-            <button className="icon-button" title="Newer" disabled={page <= 1} onClick={() => setParams({ page: page - 1 > 1 ? page - 1 : null })}>‹</button>
-            <button className="icon-button" title="Older" disabled={start + PAGE >= data.total} onClick={() => setParams({ page: page + 1 })}>›</button>
-          </span>
-        )}
+        {pager}
       </div>
       {!data ? (
         <div className="loading">Loading…</div>
@@ -76,6 +82,7 @@ export function ImagesTab({ params, setParams, readOnly }: AdminProps) {
           ))}
         </ul>
       )}
+      {data && data.total > 0 && <div className="gallery-footer">{pager}</div>}
       {index !== null && index >= 0 && images[index] && (
         <Lightbox
           items={images.map((im) => ({

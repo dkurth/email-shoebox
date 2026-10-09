@@ -611,6 +611,7 @@ test("Images tab: the grid, the lightbox moves between images, Delete removes on
   await expect(page.locator(".pager")).toContainText("No images match."); // every test image is under 20 KB
   await page.getByLabel("Hide images under 20 KB").click();
   await expect(page.locator(".gallery li")).toHaveCount(3);
+  await expect(page.locator(".gallery-footer .pager")).toContainText("1–3 of 3"); // the same pager below the grid
   await page.locator(".gallery .tile").first().click();
   await expect(page.locator(".lightbox-name")).toHaveText("coupon.png");
   await page.keyboard.press("ArrowRight");

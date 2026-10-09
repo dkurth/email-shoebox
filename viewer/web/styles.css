@@ -351,3 +351,4 @@ mark.hl { background: #fde293; color: inherit; border-radius: 2px; }
 .tile-date { color: var(--muted); font-size: 11px; margin-top: 4px; }
 .admin-images .report-filters .pager { margin-left: auto; }
 .maintenance p { max-width: 720px; }
+.gallery-footer { display: flex; justify-content: flex-end; margin-top: 16px; }
