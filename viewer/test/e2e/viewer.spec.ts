@@ -133,20 +133,34 @@ test("Expand all shows only when a message is collapsed", async ({ page }) => {
   await expect(page.locator(".expand-all")).toHaveCount(0);
 });
 
-test("starring offers no Undo, and z does not undo an older action", async ({ page }) => {
+test("starring shows no message; the star icon changes, in the list and in a conversation", async ({ page }) => {
   server = await startServer();
   await page.goto(server.url);
   await expect(subjects(page)).toHaveCount(5);
-  await page.keyboard.press("#"); // trash "Welcome to the archive" (Undo offered)
-  await expect(page.locator(".toast-undo")).toBeVisible();
+  const rowStar = (i: number) => page.locator(".thread-row").nth(i).locator(".star");
   await page.keyboard.press("s");
-  await expect(page.locator(".toast")).toContainText("Conversation starred.");
-  await expect(page.locator(".toast-undo")).toHaveCount(0);
-  await page.keyboard.press("z");
-  await expect(subjects(page)).toHaveCount(4); // the trash was not undone
-  await page.locator(".thread-row").first().locator(".star").click();
-  await expect(page.locator(".toast")).toContainText("Conversation unstarred.");
-  await expect(page.locator(".toast-undo")).toHaveCount(0);
+  await expect(rowStar(0)).toHaveAttribute("aria-pressed", "true");
+  await rowStar(0).click();
+  await expect(rowStar(0)).toHaveAttribute("aria-pressed", "false");
+  await expect(page.locator(".toast")).toHaveCount(0);
+
+  // Clicking a row's star stars that row only, and keeps the checked rows checked.
+  await page.locator(".thread-row").nth(2).getByRole("checkbox").check();
+  await rowStar(1).click();
+  await expect(rowStar(1)).toHaveAttribute("aria-pressed", "true");
+  await expect(rowStar(2)).toHaveAttribute("aria-pressed", "false");
+  await expect(page.locator(".thread-row").nth(2).getByRole("checkbox")).toBeChecked();
+
+  // In a conversation: the title has a star; s and a click toggle it.
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Enter"); // opens row 1 (the cursor moved there with the click), starred above
+  const titleStar = page.locator(".thread-title .star");
+  await expect(titleStar).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("s");
+  await expect(titleStar).toHaveAttribute("aria-pressed", "false");
+  await titleStar.click();
+  await expect(titleStar).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".toast")).toHaveCount(0);
 });
 
 test("label colors: pick one in the sidebar menu; children follow; Default color resets", async ({ page }) => {

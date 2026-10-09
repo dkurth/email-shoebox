@@ -125,7 +125,13 @@ function MessageCard({ m, me, expanded, onToggle }: { m: MessageDetail; me: stri
   );
 }
 
-export function ThreadView({ thread, me, view }: { thread: ThreadDetail; me: string[]; view: string }) {
+export function ThreadView({ thread, me, view, onToggleStar }: {
+  thread: ThreadDetail;
+  me: string[];
+  view: string;
+  onToggleStar?: () => void; // omitted in read-only mode
+}) {
+  const starred = thread.messages.some((m) => m.starred);
   const [showHidden, setShowHidden] = useState(false);
   const shown = thread.messages.filter((m) => m.inContext || showHidden);
   const hidden = thread.messages.filter((m) => !m.inContext).length;
@@ -152,6 +158,16 @@ export function ThreadView({ thread, me, view }: { thread: ThreadDetail; me: str
     <div className="thread-view">
       <div className="thread-title">
         <h1>{thread.subject || "(no subject)"}</h1>
+        <button
+          className={`star${starred ? " on" : ""}`}
+          aria-label={starred ? "Starred" : "Not starred"}
+          aria-pressed={starred}
+          title={onToggleStar ? (starred ? "Unstar (s)" : "Star (s)") : undefined}
+          disabled={!onToggleStar}
+          onClick={onToggleStar}
+        >
+          {starred ? "★" : "☆"}
+        </button>
         {thread.labels.map((l) => <Chip key={l} name={l} />)}
         {shown.some((m) => !expanded.has(m.id)) && (
           <button className="link-button expand-all" onClick={() => setExpanded(new Set(shown.map((m) => m.id)))}>

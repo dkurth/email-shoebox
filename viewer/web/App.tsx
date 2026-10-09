@@ -191,7 +191,8 @@ export function App() {
     }
   };
 
-  const afterAction = (after: After) => {
+  /** keepSelection: the action named its own threads (a row's star), so the checkboxes stay. */
+  const afterAction = (after: After, keepSelection = false) => {
     const ids = targetIds();
     if (route.threadId) {
       if (after === "list") backToList();
@@ -201,20 +202,24 @@ export function App() {
         else backToList();
       } else setThreadVersion((v) => v + 1);
     }
-    if (ids.length) setSelected(new Set());
-    setAllInView(false);
+    if (!keepSelection) {
+      if (ids.length) setSelected(new Set());
+      setAllInView(false);
+    }
     reload();
   };
 
-  const run = async (url: string, body: object, done: (n: number) => string, after: After, opts: { undo?: boolean } = {}) => {
+  /** Apply an action to `threadIds`, else the targets. `done` = the message to show, with Undo; null = no message. */
+  const run = async (url: string, body: object, done: ((n: number) => string) | null, after: After, threadIds?: string[]) => {
     if (readOnly) return showToast("This viewer is read-only.");
-    const ids = targetIds();
-    if (!ids.length && !allInView) return;
-    const payload = allInView && !route.threadId ? { ...body, view: route.view, all: true } : { ...body, view: route.view, threadIds: ids };
+    const ids = threadIds ?? targetIds();
+    const all = !threadIds && allInView && !route.threadId;
+    if (!ids.length && !all) return;
+    const payload = all ? { ...body, view: route.view, all: true } : { ...body, view: route.view, threadIds: ids };
     try {
       const r = await post<ModifyResult>(url, payload);
-      afterAction(after);
-      showToast(done(r.threads), opts.undo !== false && r.changes.length ? undo(r.changes) : undefined);
+      afterAction(after, !!threadIds);
+      if (done) showToast(done(r.threads), r.changes.length ? undo(r.changes) : undefined);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -232,8 +237,8 @@ export function App() {
     star: () => {
       const ts = route.threadId ? [thread] : targetSummaries();
       const starred = !(route.threadId ? thread?.messages.some((m) => m.starred) : ts[0] && (ts[0] as ThreadSummary).starred);
-      // Starring is undone by starring again, so it offers no Undo.
-      run("/api/threads/star", { starred }, (n) => `${conv(n)} ${starred ? "starred" : "unstarred"}.`, "stay", { undo: false });
+      // No message: the star icon shows the change.
+      run("/api/threads/star", { starred }, null, "stay");
     },
     read: () => run("/api/threads/modify", { add: [], remove: ["Unread"] }, (n) => `${conv(n)} marked as read.`, "stay"),
     unread: () => run("/api/threads/modify", { add: ["Unread"], remove: [], target: "newest" }, (n) => `${conv(n)} marked as unread.`, "list"),
@@ -437,7 +442,11 @@ export function App() {
           )}
           {error && <div className="error-banner" onClick={() => setError(null)}>{error}</div>}
           {route.threadId ? (
-            thread ? <ThreadView key={thread.threadId} thread={thread} me={me} view={route.view} /> : <div className="loading">Loading…</div>
+            thread ? (
+              <ThreadView key={thread.threadId} thread={thread} me={me} view={route.view} onToggleStar={readOnly ? undefined : actions.star} />
+            ) : (
+              <div className="loading">Loading…</div>
+            )
           ) : list ? (
             <ThreadList
               key={`${route.view}/${route.page}`}
@@ -445,7 +454,7 @@ export function App() {
               cursor={cursor}
               selected={selected}
               onToggleSelect={toggleSelect}
-              onToggleStar={readOnly ? undefined : (t) => run("/api/threads/star", { starred: !t.starred, threadIds: [t.threadId] }, (n) => `${conv(n)} ${t.starred ? "unstarred" : "starred"}.`, "stay", { undo: false })}
+              onToggleStar={readOnly ? undefined : (t) => run("/api/threads/star", { starred: !t.starred }, null, "stay", [t.threadId])}
               onCursor={setCursor}
               onOpen={(t) => go({ view: route.view, page: route.page, threadId: t.threadId })}
             />

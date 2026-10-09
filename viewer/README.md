@@ -56,7 +56,9 @@ Options (after `--`):
   headers and decoded parts. **Click an attachment to download it.**
 - **Opening a conversation marks it read.**
 - **Undo:** after archive, trash or a label change, a message at the bottom
-  left offers **Undo** (or press `z`). Star and unstar have no Undo: star again.
+  left offers **Undo** (or press `z`). Star and unstar show no message: the
+  star icon (in the list, and next to the subject of an open conversation)
+  changes at once.
 - **Empty Trash:** in Trash, "Empty Trash now" (or select conversations and
   "Delete forever"). A dialog shows how many messages, conversations and
   attachments will be deleted. **Confirmed deletes are permanent**: the rows
