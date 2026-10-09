@@ -1,8 +1,10 @@
 // One conversation, as in Gmail: subject, then one card per message (read ones collapsed).
 import { useEffect, useMemo, useState } from "react";
-import type { Address, MessageDetail, ThreadDetail } from "../shared/types.ts";
+import { previewKind } from "../shared/preview.ts";
+import type { Address, AttachmentInfo, MessageDetail, ThreadDetail } from "../shared/types.ts";
 import { EmailBody } from "./EmailBody.tsx";
 import { displayName, fullDate, recipientsLine, relative, size } from "./format.ts";
+import { Lightbox } from "./Lightbox.tsx";
 import { Chip } from "./ThreadList.tsx";
 
 function AddressList({ list, me }: { list: Address[]; me: string[] }) {
@@ -54,27 +56,116 @@ function fileIcon(type: string): string {
   return "📎";
 }
 
+/** The file type icon and the "no preview" fallback. */
+function FileChip({ a, href, newTab }: { a: AttachmentInfo; href: string; newTab?: boolean }) {
+  return (
+    <a
+      className="file-chip"
+      href={href}
+      {...(newTab ? { target: "_blank", rel: "noopener noreferrer" } : { download: a.filename ?? "" })}
+      title={`${newTab ? "Open" : "Download"} ${a.filename ?? "attachment"}`}
+    >
+      <span className="file-icon" aria-hidden>{fileIcon(a.contentType)}</span>
+      <span className="file-name">{a.filename || "(no name)"}</span>
+      <span className="file-size">{size(a.size)}</span>
+    </a>
+  );
+}
+
+function DownloadIcon({ a }: { a: AttachmentInfo }) {
+  return (
+    <a className="download-icon" href={`/api/attachments/${a.id}/download`} download={a.filename ?? ""} title={`Download ${a.filename ?? "attachment"}`} aria-label="Download">
+      ⬇
+    </a>
+  );
+}
+
+function ImageCard({ a, onOpen }: { a: AttachmentInfo; onOpen: () => void }) {
+  const [broken, setBroken] = useState(false);
+  if (broken) {
+    return (
+      <li className="attachment">
+        <FileChip a={a} href={`/api/attachments/${a.id}/download`} />
+        <span className="no-preview">No preview available</span>
+      </li>
+    );
+  }
+  return (
+    <li className="attachment image-card">
+      <button className="thumb" onClick={onOpen} title={`View ${a.filename ?? "image"}`}>
+        <img src={`/api/attachments/${a.id}/inline`} alt={a.filename ?? "image"} loading="lazy" decoding="async" onError={() => setBroken(true)} />
+      </button>
+      <div className="image-card-foot">
+        <FileChip a={a} href={`/api/attachments/${a.id}/download`} />
+      </div>
+    </li>
+  );
+}
+
+function MediaAttachment({ a, kind }: { a: AttachmentInfo; kind: "audio" | "video" }) {
+  const [broken, setBroken] = useState(false);
+  const src = `/api/attachments/${a.id}/inline`;
+  return (
+    <li className={`attachment media ${kind}`}>
+      <FileChip a={a} href={`/api/attachments/${a.id}/download`} />
+      {broken ? (
+        <span className="no-preview">No preview available</span>
+      ) : kind === "audio" ? (
+        <audio controls preload="none" src={src} onError={() => setBroken(true)} />
+      ) : (
+        <video controls preload="metadata" src={src} onError={() => setBroken(true)} />
+      )}
+    </li>
+  );
+}
+
 function Attachments({ m }: { m: MessageDetail }) {
+  const [viewing, setViewing] = useState<number | null>(null);
   // Inline images the HTML shows itself aren't listed again.
   const html = m.bodyHtml?.toLowerCase() ?? "";
   const list = m.attachments.filter((a) => !(a.isInline && a.contentId && html.includes(`cid:${a.contentId.toLowerCase()}`)));
   if (!list.length) return null;
+  const images = list.filter((a) => previewKind(a.contentType, a.filename) === "image");
+  const others = list.filter((a) => previewKind(a.contentType, a.filename) !== "image");
   return (
     <div className="attachments">
       <div className="attachments-title">
         {list.length} attachment{list.length > 1 ? "s" : ""}
       </div>
-      <ul>
-        {list.map((a) => (
-          <li key={a.id}>
-            <a href={`/api/attachments/${a.id}/download`} download={a.filename ?? undefined} title={`Download ${a.filename ?? "attachment"}`}>
-              <span className="file-icon" aria-hidden>{fileIcon(a.contentType)}</span>
-              <span className="file-name">{a.filename || "(no name)"}</span>
-              <span className="file-size">{size(a.size)}</span>
-            </a>
-          </li>
-        ))}
-      </ul>
+      {images.length > 0 && (
+        <ul className="image-cards">
+          {images.map((a, i) => <ImageCard key={a.id} a={a} onOpen={() => setViewing(i)} />)}
+        </ul>
+      )}
+      {others.length > 0 && (
+        <ul>
+          {others.map((a) => {
+            const kind = previewKind(a.contentType, a.filename);
+            if (kind === "audio" || kind === "video") return <MediaAttachment key={a.id} a={a} kind={kind} />;
+            if (kind === "pdf" || kind === "text") {
+              return (
+                <li key={a.id} className="attachment">
+                  <FileChip a={a} href={`/api/attachments/${a.id}/inline`} newTab />
+                  <DownloadIcon a={a} />
+                </li>
+              );
+            }
+            return (
+              <li key={a.id} className="attachment">
+                <FileChip a={a} href={`/api/attachments/${a.id}/download`} />
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {viewing !== null && (
+        <Lightbox
+          items={images.map((a) => ({ id: a.id, name: a.filename || "(no name)", size: a.size }))}
+          index={viewing}
+          onIndex={setViewing}
+          onClose={() => setViewing(null)}
+        />
+      )}
     </div>
   );
 }

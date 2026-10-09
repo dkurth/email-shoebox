@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { applyChange, removeAction } from "../shared/labels.ts";
 import type { Sidebar, ThreadDetail, ThreadList } from "../shared/types.ts";
 import { firstName } from "../server/views.ts";
-import { setup } from "./helpers.ts";
+import { PORT, setup } from "./helpers.ts";
 
 const subjects = (l: ThreadList) => l.threads.map((t) => t.subject);
 
@@ -15,7 +15,7 @@ describe("sidebar", () => {
     expect(s.folders.find((f) => f.view === "spam")!.count).toBe(1);
     expect(s.folders.find((f) => f.view === "drafts")!.count).toBe(1);
     expect(s.categories.map((c) => c.name)).toEqual(["Personal", "Promotions"]);
-    expect(s.labels.map((l) => l.name)).toEqual(["Family", "Newsletters", "Travel/2024", "Work", "Work/Projects"]);
+    expect(s.labels.map((l) => l.name)).toEqual(["Family", "Media", "Newsletters", "Travel/2024", "Work", "Work/Projects"]);
     expect(s.labels.find((l) => l.name === "Travel/2024")!.count).toBe(1);
   });
 });
@@ -67,11 +67,11 @@ describe("thread list", () => {
     const { get } = setup();
     const p1 = (await get("/api/threads?view=all")).body as ThreadList;
     const p2 = (await get("/api/threads?view=all&page=2")).body as ThreadList;
-    expect(p1.total).toBe(66); // 68 threads minus the Spam thread and the Trash-only thread
+    expect(p1.total).toBe(68); // 70 threads minus the Spam thread and the Trash-only thread
     expect(p1.threads).toHaveLength(50);
-    expect(p2.threads).toHaveLength(16);
+    expect(p2.threads).toHaveLength(18);
     const p9 = (await get("/api/threads?view=all&page=9")).body as ThreadList;
-    expect(p9).toMatchObject({ total: 66, threads: [] });
+    expect(p9).toMatchObject({ total: 68, threads: [] });
   });
 
   it("rejects unknown views and bad pages", async () => {
@@ -114,18 +114,63 @@ describe("thread detail", () => {
 });
 
 describe("attachments", () => {
-  it("downloads with the original name and inlines only images", async () => {
+  it("downloads with the original name", async () => {
     const { get, db } = setup();
     const pdf = db.prepare("SELECT id FROM attachments WHERE filename = 'itinerary.pdf'").pluck().get();
     const r = await get(`/api/attachments/${pdf}/download`);
     expect(r.status).toBe(200);
     expect(r.res.headers.get("content-disposition")).toBe(`attachment; filename="itinerary.pdf"; filename*=UTF-8''itinerary.pdf`);
     expect(r.body).toBe("%PDF-1.4 fake");
-    expect((await get(`/api/attachments/${pdf}/inline`)).status).toBe(415);
     const png = db.prepare("SELECT id FROM attachments WHERE filename = 'logo.png'").pluck().get();
     const img = await get(`/api/attachments/${png}/inline`);
     expect(img.status).toBe(200);
     expect(img.res.headers.get("content-type")).toBe("image/png");
+  });
+
+  it("inlines only files the browser can show, with a safe type", async () => {
+    const { get, db } = setup();
+    const id = (name: string) => db.prepare("SELECT id FROM attachments WHERE filename = ?").pluck().get(name);
+    const inline = (name: string) => get(`/api/attachments/${id(name)}/inline`);
+    const cases: [string, number, string | null][] = [
+      ["voice-memo.mp3", 200, "audio/mpeg"],
+      ["clip.mp4", 200, "video/mp4"],
+      ["photo.png", 200, "image/png"], // sent as application/octet-stream
+      ["minutes.pdf", 200, "application/pdf"],
+      ["server.log", 200, "text/plain; charset=utf-8"],
+      ["drawing.svg", 415, null],
+      ["report.xlsx", 415, null],
+    ];
+    for (const [name, status, type] of cases) {
+      const r = await inline(name);
+      expect([name, r.status]).toEqual([name, status]);
+      if (type) {
+        expect(r.res.headers.get("content-type")).toBe(type);
+        expect(r.res.headers.get("x-content-type-options")).toBe("nosniff");
+        expect(r.res.headers.get("content-disposition")).toMatch(/^inline;/);
+      }
+    }
+    // PDFs: no sandbox (Chrome's viewer needs that), but still no scripts or remote loads.
+    const pdfCsp = (await inline("minutes.pdf")).res.headers.get("content-security-policy")!;
+    expect(pdfCsp).not.toContain("sandbox");
+    expect(pdfCsp).toContain("default-src 'none'");
+    expect((await inline("voice-memo.mp3")).res.headers.get("content-security-policy")).toContain("sandbox");
+  });
+
+  it("serves byte ranges", async () => {
+    const { app, db } = setup();
+    const mp3 = db.prepare("SELECT id, size_bytes FROM attachments WHERE filename = 'voice-memo.mp3'").get() as { id: number; size_bytes: number };
+    const req = (range: string) => app.request(`/api/attachments/${mp3.id}/inline`, { headers: { host: `127.0.0.1:${PORT}`, range } });
+    const r = await req("bytes=0-99");
+    expect(r.status).toBe(206);
+    expect(r.headers.get("content-range")).toBe(`bytes 0-99/${mp3.size_bytes}`);
+    expect(r.headers.get("content-length")).toBe("100");
+    expect((await r.arrayBuffer()).byteLength).toBe(100);
+    const tail = await req("bytes=-10");
+    expect(tail.headers.get("content-range")).toBe(`bytes ${mp3.size_bytes - 10}-${mp3.size_bytes - 1}/${mp3.size_bytes}`);
+    const open = await req("bytes=100-");
+    expect((await open.arrayBuffer()).byteLength).toBe(mp3.size_bytes - 100);
+    expect((await req(`bytes=${mp3.size_bytes}-`)).status).toBe(416);
+    expect((await req("bytes=abc")).status).toBe(416);
   });
 
   it("refuses paths outside the attachments folder", async () => {

@@ -1,6 +1,9 @@
 // Writes a synthetic Takeout-style mbox (no real mail) to stdout.
 // Rebuild the committed test archive with ./rebuild-archive.sh.
 
+import fs from "node:fs";
+import path from "node:path";
+
 const ME = "Pat Owner <me@example.com>";
 const ALICE = "Alice Adams <alice@example.com>";
 const BOB = "Bob Brown <bob@example.com>";
@@ -99,7 +102,31 @@ const png = Buffer.from(
   "base64",
 );
 
-// Filler first, so the interesting threads are the newest.
+const media = (name: string) => fs.readFileSync(path.join(import.meta.dirname, "media", name));
+const pdf = Buffer.from(
+  "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n" +
+    "3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 100]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>endobj\n" +
+    "4 0 obj<</Length 44>>stream\nBT /F1 18 Tf 20 50 Td (Meeting minutes) Tj ET\nendstream endobj\n" +
+    "5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n",
+);
+const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><script>alert(1)</script><rect width="10" height="10"/></svg>');
+
+// Media first (the oldest mail), so the threads the other tests look at stay the newest.
+thread([{ from: CAROL, to: ME, subject: "Holiday media", labels: ["Archived", "Opened", "Media"], text: "Photos, a song, a clip and the minutes.\n",
+          attachments: [
+            { name: "sunset.jpg", type: "image/jpeg", data: media("sunset.jpg") },
+            { name: "beach.png", type: "image/png", data: media("beach.png") },
+            { name: "photo.png", type: "application/octet-stream", data: png },
+            { name: "voice-memo.mp3", type: "audio/mpeg", data: media("tone.mp3") },
+            { name: "clip.mp4", type: "video/mp4", data: media("clip.mp4") },
+            { name: "minutes.pdf", type: "application/pdf", data: pdf },
+            { name: "server.log", type: "text/plain", data: Buffer.from("<b>not html</b>\nline 2\n") },
+            { name: "drawing.svg", type: "image/svg+xml", data: svg },
+          ] }]);
+thread([{ from: BOB, to: ME, subject: "Fwd: Holiday media", labels: ["Archived", "Opened", "Media"], text: "Same sunset again.\n",
+          attachments: [{ name: "sunset.jpg", type: "image/jpeg", data: media("sunset.jpg") }] }]);
+
+// Filler next, so the interesting threads are the newest.
 for (let i = 1; i <= 55; i++) {
   thread([{ from: SHOP, to: ME, subject: `Weekly deals #${i}`, labels: ["Archived", "Opened", "Category Promotions", "Newsletters"], text: `Deal number ${i}.\n` }]);
 }

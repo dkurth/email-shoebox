@@ -240,3 +240,32 @@ test("the moon button switches dark mode on and off, and the choice is remembere
   await page.emulateMedia({ colorScheme: "dark" }); // a chosen theme ignores the system setting
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
 });
+
+test("shows image, audio and video attachments, and opens PDFs in a tab", async ({ page }) => {
+  server = await startServer();
+  await page.goto(server.url + "#/label/Media");
+  await page.locator(".thread-row", { hasText: "Holiday media" }).filter({ hasNotText: "Fwd" }).click();
+  const cards = page.locator(".image-card");
+  await expect(cards).toHaveCount(3); // sunset.jpg, beach.png, photo.png (sent as octet-stream); never the SVG
+  await expect(cards.locator(".file-name")).toHaveText(["sunset.jpg", "beach.png", "photo.png"]);
+  await expect(page.locator(".attachment", { hasText: "drawing.svg" }).locator("img")).toHaveCount(0);
+
+  await cards.first().locator(".thumb").click();
+  await expect(page.locator(".lightbox-name")).toHaveText("sunset.jpg");
+  await expect(page.locator(".lightbox-meta")).toContainText("1 of 3");
+  await page.keyboard.press("ArrowRight");
+  await expect(page.locator(".lightbox-name")).toHaveText("beach.png");
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".lightbox")).toHaveCount(0);
+  await expect(page.locator(".thread-title h1")).toHaveText("Holiday media"); // Esc closed only the lightbox
+
+  await expect(page.locator(".attachment.audio audio")).toHaveCount(1);
+  await expect(page.locator(".attachment.video video")).toHaveCount(1);
+
+  const pdf = page.locator(".file-chip", { hasText: "minutes.pdf" });
+  await expect(pdf).toHaveAttribute("target", "_blank");
+  await expect(pdf).toHaveAttribute("href", /\/api\/attachments\/\d+\/inline$/);
+  const res = await page.request.get(server.url + (await pdf.getAttribute("href"))!.slice(1));
+  expect(res.headers()["content-type"]).toBe("application/pdf");
+  expect(res.headers()["content-disposition"]).toMatch(/^inline;/);
+});

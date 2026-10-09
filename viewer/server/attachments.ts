@@ -3,6 +3,7 @@ import type { Context } from "hono";
 import fs from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
+import { preview } from "../shared/preview.ts";
 import type { Archive } from "./db.ts";
 
 interface AttachmentRow {
@@ -27,6 +28,32 @@ export function contentDisposition(kind: "attachment" | "inline", filename: stri
   return `${kind}; filename="${ascii}"; filename*=UTF-8''${encoded}`;
 }
 
+/** Parse one "bytes=a-b" range. Returns null for no header, "bad" for one we can't satisfy. */
+export function parseRange(header: string | undefined, size: number): { start: number; end: number } | null | "bad" {
+  if (!header) return null;
+  const m = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  if (!m || (m[1] === "" && m[2] === "")) return "bad";
+  let start: number;
+  let end: number;
+  if (m[1] === "") {
+    // "bytes=-500": the last 500 bytes
+    const n = Number(m[2]);
+    if (n === 0) return "bad";
+    start = Math.max(0, size - n);
+    end = size - 1;
+  } else {
+    start = Number(m[1]);
+    end = m[2] === "" ? size - 1 : Math.min(Number(m[2]), size - 1);
+  }
+  if (start >= size || start > end) return "bad";
+  return { start, end };
+}
+
+// Even if a browser renders a file directly (e.g. an SVG), it can't run scripts.
+const SANDBOX_CSP = "default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'; sandbox";
+// Chrome's PDF viewer does not load under a sandbox CSP; PDFs get a strict policy without it.
+const PDF_CSP = "default-src 'none'; object-src 'self'; img-src 'self' data:; style-src 'unsafe-inline'";
+
 export function serveAttachment(c: Context, archive: Archive, id: number, mode: "download" | "inline") {
   const row = archive.db.prepare("SELECT path, filename, content_type, size_bytes FROM attachments WHERE id = ?").get(id) as AttachmentRow | undefined;
   if (!row) return c.json({ error: "No such attachment" }, 404);
@@ -34,20 +61,31 @@ export function serveAttachment(c: Context, archive: Archive, id: number, mode: 
   if (!file) return c.json({ error: "Unsafe attachment path" }, 400);
   if (!fs.existsSync(file)) return c.json({ error: "Attachment file is missing from the archive folder" }, 404);
 
-  const type = row.content_type || "application/octet-stream";
-  if (mode === "inline" && !type.startsWith("image/")) {
-    return c.json({ error: "Only images can be shown inline" }, 415);
+  let type = row.content_type || "application/octet-stream";
+  let csp = SANDBOX_CSP;
+  if (mode === "inline") {
+    const p = preview(row.content_type, row.filename);
+    if (!p) return c.json({ error: "This file type can't be shown in the browser" }, 415);
+    type = p.type;
+    if (p.kind === "pdf") csp = PDF_CSP;
   }
   const name = row.filename || path.basename(file).replace(/^\d+-/, "");
+  const total = fs.statSync(file).size;
   const headers: Record<string, string> = {
     "Content-Type": type,
-    "Content-Length": String(fs.statSync(file).size),
     "Content-Disposition": contentDisposition(mode === "download" ? "attachment" : "inline", name),
     "X-Content-Type-Options": "nosniff",
-    // Even if a browser renders this file directly (e.g. an SVG), it can't run scripts.
-    "Content-Security-Policy": "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox",
+    "Content-Security-Policy": csp,
     "Cache-Control": "private, max-age=3600",
+    "Accept-Ranges": "bytes",
   };
-  const stream = Readable.toWeb(fs.createReadStream(file)) as ReadableStream;
-  return new Response(stream, { status: 200, headers });
+  const range = parseRange(c.req.header("range"), total);
+  if (range === "bad") {
+    return new Response(null, { status: 416, headers: { "Content-Range": `bytes */${total}` } });
+  }
+  const { start, end } = range ?? { start: 0, end: total - 1 };
+  headers["Content-Length"] = String(total ? end - start + 1 : 0);
+  if (range) headers["Content-Range"] = `bytes ${start}-${end}/${total}`;
+  const stream = total ? (Readable.toWeb(fs.createReadStream(file, { start, end })) as ReadableStream) : null;
+  return new Response(stream, { status: range ? 206 : 200, headers });
 }
