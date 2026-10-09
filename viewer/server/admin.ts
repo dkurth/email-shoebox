@@ -140,7 +140,7 @@ export function imports(db: DB): AdminImport[] {
 export interface PeopleQuery {
   dir: "sent" | "received";
   q?: string; // filter: part of the address or name
-  sort?: "count" | "addr" | "name" | "last" | "attachmentBytes";
+  sort?: "count" | "to" | "cc" | "bcc" | "addr" | "name" | "last" | "attachmentBytes";
   desc?: boolean;
   page: number;
   pageSize?: number;
@@ -188,7 +188,7 @@ export function people(db: DB, me: string[], pq: PeopleQuery): { rows: AdminPers
     where.push(pq.byDomain ? `${key} LIKE ? ESCAPE '\\'` : "(a.addr LIKE ? ESCAPE '\\' OR a.name LIKE ? ESCAPE '\\')");
     params.push(like, ...(pq.byDomain ? [] : [like]));
   }
-  const sortCol = { count: "n", addr: "g.k", name: "name", last: "last", attachmentBytes: "attBytes" }[pq.sort ?? "count"] ?? "n";
+  const sortCol = { count: "n", to: "toN", cc: "ccN", bcc: "bccN", addr: "g.k", name: "name", last: "last", attachmentBytes: "attBytes" }[pq.sort ?? "count"] ?? "n";
   const dir = pq.desc === false ? "ASC" : "DESC";
   const size = pq.pageSize ?? PEOPLE_PAGE;
   // Everything is grouped from narrow sets: the address rows (g2), each message's date from the

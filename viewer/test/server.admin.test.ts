@@ -87,6 +87,10 @@ describe("admin people", () => {
     expect((await people(ctx, "dir=received&q=%25")).rows).toEqual([]); // % is literal
     const byName = await people(ctx, "dir=received&sort=addr&desc=0");
     expect(byName.rows[0].addr).toBe("alice@example.com");
+    // Sent: sort by the To, Cc and Bcc columns (Alice is on two messages as To, Carol on one).
+    const byTo = await people(ctx, "dir=sent&sort=to&desc=0");
+    expect(byTo.rows.map((p) => [p.addr, p.to])).toEqual([["carol@example.com", 1], ["alice@example.com", 2]]);
+    for (const k of ["cc", "bcc"]) expect((await ctx.get(`/api/admin/people?dir=sent&sort=${k}`)).status).toBe(200);
     const byBytes = await people(ctx, "dir=received&sort=attachmentBytes");
     expect(byBytes.rows[0].addr).toBe("carol@example.com");
     const domains = await people(ctx, "dir=received&domain=1");

@@ -70,7 +70,10 @@ function PeopleTable({ dir, chats, byDomain }: { dir: "sent" | "received"; chats
             <tr>
               {header("addr", byDomain ? "Domain" : "Address")}
               {header("name", byDomain ? "Most common name" : "Name")}
-              {header("count", dir === "sent" ? "Times" : "Messages", true)}
+              {header("count", dir === "sent" ? "Total" : "Messages", true)}
+              {dir === "sent" && header("to", "To", true)}
+              {dir === "sent" && header("cc", "Cc", true)}
+              {dir === "sent" && header("bcc", "Bcc", true)}
               {header("last", "Last")}
               {dir === "received" && header("attachmentBytes", "Attachments", true)}
             </tr>
@@ -93,18 +96,20 @@ function PeopleTable({ dir, chats, byDomain }: { dir: "sent" | "received"; chats
                     <a href="#" title="About this person" onClick={(e) => { e.preventDefault(); personPage(r.addr); }}>{r.name}</a>
                   )}
                 </td>
-                <td className="num">
-                  {num(r.count)}
-                  {dir === "sent" && (r.cc || r.bcc) ? (
-                    <div className="muted-small">To {num(r.to)} · Cc {num(r.cc)} · Bcc {num(r.bcc)}</div>
-                  ) : null}
-                </td>
+                <td className="num">{num(r.count)}</td>
+                {dir === "sent" && (
+                  <>
+                    <td className="num">{r.to ? num(r.to) : ""}</td>
+                    <td className="num">{r.cc ? num(r.cc) : ""}</td>
+                    <td className="num">{r.bcc ? num(r.bcc) : ""}</td>
+                  </>
+                )}
                 <td>{day(r.last)}</td>
                 {dir === "received" && <td className="num">{r.attachments ? `${num(r.attachments)} · ${size(r.attachmentBytes)}` : ""}</td>}
               </tr>
             ))}
             {!data.rows.length && (
-              <tr><td colSpan={5} className="muted-small">Nothing matches.</td></tr>
+              <tr><td colSpan={dir === "sent" ? 7 : 5} className="muted-small">Nothing matches.</td></tr>
             )}
           </tbody>
         </table>

@@ -103,8 +103,8 @@ export function createApp(opts: AppOptions): Hono {
   app.get("/api/admin/people", (c) => {
     const dir = c.req.query("dir");
     if (dir !== "sent" && dir !== "received") throw new BadRequest("dir must be sent or received");
-    const sort = c.req.query("sort") as "count" | "addr" | "name" | "last" | "attachmentBytes" | undefined;
-    if (sort && !["count", "addr", "name", "last", "attachmentBytes"].includes(sort)) throw new BadRequest(`bad sort: ${sort}`);
+    const sort = c.req.query("sort") as "count" | "to" | "cc" | "bcc" | "addr" | "name" | "last" | "attachmentBytes" | undefined;
+    if (sort && !["count", "to", "cc", "bcc", "addr", "name", "last", "attachmentBytes"].includes(sort)) throw new BadRequest(`bad sort: ${sort}`);
     return c.json(
       people(db, opts.me, {
         dir,
