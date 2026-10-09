@@ -1,0 +1,94 @@
+import { describe, expect, it } from "vitest";
+import type { NoteSaveResult, ThreadDetail, ThreadList, TrashSummary } from "../shared/types.ts";
+import { setup } from "./helpers.ts";
+
+const threadOf = (ctx: ReturnType<typeof setup>, subject: string) =>
+  ctx.db.prepare("SELECT thread_id FROM messages WHERE subject = ?").pluck().get(subject) as string;
+
+const put = (ctx: ReturnType<typeof setup>, threadId: string, body: object) =>
+  ctx.post(`/api/threads/${encodeURIComponent(threadId)}/note`, body, "PUT");
+
+describe("notes", () => {
+  it("saves, updates and deletes a note", async () => {
+    const ctx = setup();
+    const t = threadOf(ctx, "Pancake recipe");
+    const r1 = await put(ctx, t, { body: "Try with\r\nbuttermilk", expectedUpdatedAt: null });
+    expect(r1.status).toBe(200);
+    const saved = (r1.body as NoteSaveResult).note!;
+    expect(saved.body).toBe("Try with\nbuttermilk");
+    expect(saved.createdAt).toBe(saved.updatedAt);
+    expect(saved.updatedAt).toBeGreaterThan(1e12); // milliseconds
+
+    const r2 = await put(ctx, t, { body: "Use buttermilk", expectedUpdatedAt: saved.updatedAt });
+    const updated = (r2.body as NoteSaveResult).note!;
+    expect(updated.updatedAt).toBeGreaterThan(saved.updatedAt); // even within the same millisecond
+    expect(updated.createdAt).toBe(saved.createdAt);
+    expect(ctx.db.prepare("SELECT count(*) FROM notes_fts WHERE notes_fts MATCH 'buttermilk'").pluck().get()).toBe(1);
+
+    const detail = (await ctx.get(`/api/threads/${t}?view=starred`)).body as ThreadDetail;
+    expect(detail.note).toMatchObject({ body: "Use buttermilk", updatedAt: updated.updatedAt });
+
+    const r3 = await put(ctx, t, { body: "  \n ", expectedUpdatedAt: updated.updatedAt });
+    expect(r3.body).toEqual({ deleted: true, note: null });
+    expect(ctx.db.prepare("SELECT count(*) FROM thread_notes").pluck().get()).toBe(0);
+    expect(ctx.db.prepare("SELECT count(*) FROM notes_fts WHERE notes_fts MATCH 'buttermilk'").pluck().get()).toBe(0);
+  });
+
+  it("refuses a stale save with 409 and the stored note, unless forced", async () => {
+    const ctx = setup();
+    const t = threadOf(ctx, "Pancake recipe");
+    const first = ((await put(ctx, t, { body: "tab one", expectedUpdatedAt: null })).body as NoteSaveResult).note!;
+    const stale = await put(ctx, t, { body: "tab two", expectedUpdatedAt: null });
+    expect(stale.status).toBe(409);
+    expect(stale.body.note).toMatchObject({ body: "tab one", updatedAt: first.updatedAt });
+    expect((await put(ctx, t, { body: "tab two", expectedUpdatedAt: first.updatedAt - 5 })).status).toBe(409);
+    const forced = await put(ctx, t, { body: "tab two", expectedUpdatedAt: null, force: true });
+    expect(forced.status).toBe(200);
+    expect((forced.body as NoteSaveResult).note!.body).toBe("tab two");
+  });
+
+  it("checks its input", async () => {
+    const ctx = setup();
+    const t = threadOf(ctx, "Pancake recipe");
+    expect((await put(ctx, "no-such-thread", { body: "x", expectedUpdatedAt: null })).status).toBe(404);
+    expect((await put(ctx, t, { body: "x".repeat(100_001), expectedUpdatedAt: null })).status).toBe(400);
+    expect((await put(ctx, t, { body: 5, expectedUpdatedAt: null })).status).toBe(400);
+    expect((await put(ctx, t, { body: "x", expectedUpdatedAt: "soon" })).status).toBe(400);
+  });
+
+  it("is refused in read-only mode and without the write header", async () => {
+    const ro = setup({ readOnly: true });
+    expect((await put(ro, threadOf(ro, "Pancake recipe"), { body: "x", expectedUpdatedAt: null })).status).toBe(403);
+    const ctx = setup();
+    const res = await ctx.app.request(`/api/threads/${threadOf(ctx, "Pancake recipe")}/note`, {
+      method: "PUT",
+      headers: { host: "127.0.0.1:5178", origin: "http://127.0.0.1:5178", "content-type": "application/json" },
+      body: JSON.stringify({ body: "x", expectedUpdatedAt: null }),
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it("shows hasNote and the first line in the thread list", async () => {
+    const ctx = setup();
+    const t = threadOf(ctx, "Pancake recipe");
+    await put(ctx, t, { body: "\n  First line here \nsecond", expectedUpdatedAt: null });
+    const list = (await ctx.get("/api/threads?view=starred")).body as ThreadList;
+    expect(list.threads[0]).toMatchObject({ threadId: t, hasNote: true, noteFirstLine: "First line here" });
+    const inbox = (await ctx.get("/api/threads?view=inbox")).body as ThreadList;
+    expect(inbox.threads.every((x) => !x.hasNote && x.noteFirstLine === null)).toBe(true);
+  });
+
+  it("Delete forever removes a note only when the whole thread is gone", async () => {
+    const ctx = setup();
+    const mixed = threadOf(ctx, "Mixed thread"); // one message in Trash, one in the Inbox
+    const coupon = threadOf(ctx, "Old coupon"); // only message is in Trash
+    await put(ctx, mixed, { body: "keep me", expectedUpdatedAt: null });
+    await put(ctx, coupon, { body: "goes away", expectedUpdatedAt: null });
+    const s = (await ctx.post("/api/trash/summary", {})).body as TrashSummary;
+    expect(s.notes).toBe(1);
+    const r = await ctx.post("/api/trash/empty", { confirmCount: s.messages });
+    expect(r.body.notes).toBe(1);
+    const left = ctx.db.prepare("SELECT thread_id FROM thread_notes").pluck().all();
+    expect(left).toEqual([mixed]);
+  });
+});

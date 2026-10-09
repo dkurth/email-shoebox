@@ -9,6 +9,7 @@ import { InputError, createLabel, deleteLabel, modifyThreads, setLabelColor, set
 import { guard } from "./security.ts";
 import { ConflictError, deleteForever, trashSummary } from "./trash.ts";
 import { listThreads, original, sidebar, threadDetail } from "./views.ts";
+import { NoteConflict, NotFound, saveNote } from "./notes.ts";
 
 export class BadRequest extends Error {}
 
@@ -40,6 +41,8 @@ export function createApp(opts: AppOptions): Hono {
       return c.json({ error: err.message }, 400);
     }
     if (err instanceof ConflictError) return c.json({ error: err.message }, 409);
+    if (err instanceof NoteConflict) return c.json({ error: err.message, note: err.note }, 409);
+    if (err instanceof NotFound) return c.json({ error: err.message }, 404);
     console.error(err);
     return c.json({ error: err.message }, 500);
   });
@@ -108,6 +111,10 @@ export function createApp(opts: AppOptions): Hono {
     const body = await c.req.json();
     if (!Array.isArray(body.threadIds)) throw new BadRequest("threadIds must be a list");
     return c.json(deleteForever(archive, { threadIds: body.threadIds, confirmCount: body.confirmCount }));
+  });
+  app.put("/api/threads/:threadId/note", async (c) => {
+    const body = await c.req.json();
+    return c.json(saveNote(db, c.req.param("threadId"), body.body, body.expectedUpdatedAt ?? null, body.force === true));
   });
   app.post("/api/labels", async (c) => c.json(createLabel(db, (await c.req.json()).name)));
   app.delete("/api/labels/:id", (c) => c.json(deleteLabel(db, intParam(c.req.param("id")))));

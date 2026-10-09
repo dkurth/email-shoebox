@@ -17,10 +17,12 @@ export function get<T>(url: string): Promise<T> {
   return fetch(url).then((r) => handle<T>(r));
 }
 
+export const WRITE_HEADER = "x-gmail-viewer";
+
 export function post<T>(url: string, body: unknown, method = "POST"): Promise<T> {
   return fetch(url, {
     method,
-    headers: { "content-type": "application/json", "x-gmail-viewer": "1" },
+    headers: { "content-type": "application/json", [WRITE_HEADER]: "1" },
     body: JSON.stringify(body),
   }).then((r) => handle<T>(r));
 }

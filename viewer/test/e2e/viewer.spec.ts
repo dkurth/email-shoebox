@@ -269,3 +269,61 @@ test("shows image, audio and video attachments, and opens PDFs in a tab", async 
   expect(res.headers()["content-type"]).toBe("application/pdf");
   expect(res.headers()["content-disposition"]).toMatch(/^inline;/);
 });
+
+test("notes: autosave, saved on leaving and on reload, cleared, read back", async ({ page }) => {
+  server = await startServer();
+  await page.goto(server.url + "#/starred");
+  await page.locator(".thread-row", { hasText: "Pancake recipe" }).click();
+  const button = page.locator(".note-button");
+  await expect(button).not.toHaveClass(/has-note/);
+  await button.click();
+  const text = page.locator(".note-text");
+  await text.fill("Try it with buttermilk.");
+  await expect(page.locator(".note-status")).toContainText("Saved");
+  await expect(button).toHaveClass(/has-note/);
+  await expect(button).toHaveAttribute("title", "Note: Try it with buttermilk.");
+
+  // Reload: the panel stays open and shows the note.
+  await page.reload();
+  await expect(page.locator(".note-text")).toHaveValue("Try it with buttermilk.");
+
+  // Leave the thread before the 1 s autosave: it saves at once.
+  await page.locator(".note-text").fill("Changed, then left at once.");
+  await page.locator('button[title="Back to list (u)"]').click();
+  await expect(page.locator(".thread-row")).not.toHaveCount(0);
+  await page.locator(".thread-row", { hasText: "Pancake recipe" }).click();
+  await expect(page.locator(".note-text")).toHaveValue("Changed, then left at once.");
+
+  // Reload right after typing: the keepalive save on pagehide keeps it.
+  await page.locator(".note-text").fill("Typed just before the reload.");
+  await page.reload();
+  await expect(page.locator(".note-text")).toHaveValue("Typed just before the reload.");
+
+  // Clearing the text deletes the note.
+  await page.locator(".note-text").fill("");
+  await expect(page.locator(".note-status")).toHaveText("Notes are saved automatically.");
+  await expect(page.locator(".note-button")).not.toHaveClass(/has-note/);
+
+  // The icon hides the panel.
+  await page.locator(".note-button").click();
+  await expect(page.locator(".note-panel")).toHaveCount(0);
+});
+
+test("notes: a change in another tab shows the conflict choice", async ({ page, context }) => {
+  server = await startServer();
+  const url = server.url + "#/starred";
+  await page.goto(url);
+  await page.locator(".thread-row", { hasText: "Pancake recipe" }).click();
+  await page.locator(".note-button").click();
+  const other = await context.newPage();
+  await other.goto(page.url());
+  await other.locator(".note-text").fill("From the other tab.");
+  await expect(other.locator(".note-status")).toContainText("Saved");
+
+  await page.locator(".note-text").fill("From this tab.");
+  await expect(page.locator(".note-conflict")).toContainText("changed in another window");
+  await page.getByRole("button", { name: "Use theirs" }).click();
+  await expect(page.locator(".note-text")).toHaveValue("From the other tab.");
+  await page.locator(".note-text").fill("From this tab, after all.");
+  await expect(page.locator(".note-status")).toContainText("Saved");
+});

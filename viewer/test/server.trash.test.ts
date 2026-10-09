@@ -11,7 +11,7 @@ describe("empty trash", () => {
   it("summarizes what would be deleted", async () => {
     const ctx = setup();
     const s = (await ctx.post("/api/trash/summary", {})).body as TrashSummary;
-    expect(s).toEqual({ messages: 2, threads: 2, attachments: 1, attachmentBytes: 70 });
+    expect(s).toEqual({ messages: 2, threads: 2, attachments: 1, attachmentBytes: 70, notes: 0 });
   });
 
   it("deletes rows, search entries and files, and records tombstones", async () => {
@@ -24,7 +24,7 @@ describe("empty trash", () => {
 
     const r = await ctx.post("/api/trash/empty", { confirmCount: 2 });
     expect(r.status).toBe(200);
-    expect(r.body).toEqual({ messages: 2, threads: 2, folderErrors: [] });
+    expect(r.body).toEqual({ messages: 2, threads: 2, notes: 0, folderErrors: [] });
 
     expect(count(ctx, "SELECT count(*) FROM messages")).toBe(before - 2);
     expect(count(ctx, "SELECT count(*) FROM attachments WHERE message_id = ?", coupon.id)).toBe(0);

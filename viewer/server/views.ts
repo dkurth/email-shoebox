@@ -21,6 +21,7 @@ import type {
   ThreadSummary,
 } from "../shared/types.ts";
 import { chosenColors, type DB } from "./db.ts";
+import { getNote, noteFirstLines } from "./notes.ts";
 
 export const PAGE_SIZE = 50;
 const DATE = "coalesce(m.received_utc, m.date_utc, 0)";
@@ -231,6 +232,7 @@ export function listThreads(db: DB, view: View, page: number, me: string[]): Thr
   }
 
   const toPrefix = view === "sent" || view === "drafts";
+  const notes = noteFirstLines(db, ids);
   const threads: ThreadSummary[] = pageRows.map(({ thread_id, last }) => {
     const msgs = byThread.get(thread_id) ?? [];
     const visible = msgs.filter((m) => m.in_view);
@@ -262,6 +264,8 @@ export function listThreads(db: DB, view: View, page: number, me: string[]): Thr
       important: msgs.some((m) => m.is_important),
       hasAttachments: msgs.some((m) => m.has_att),
       labels: chips(msgs.map((m) => labels.get(m.id) ?? []), view),
+      hasNote: notes.has(thread_id),
+      noteFirstLine: notes.get(thread_id) ?? null,
     };
   });
   return { view, page, pageSize: PAGE_SIZE, total, threads };
@@ -343,6 +347,7 @@ export function threadDetail(db: DB, threadId: string, view: View): ThreadDetail
     subject: (shown.find((m) => m.subject) ?? messages.find((m) => m.subject))?.subject ?? "",
     labels: chips(shown.map((m) => m.labels), view),
     messages,
+    note: getNote(db, threadId),
   };
 }
 

@@ -26,6 +26,24 @@ import { ThreadView } from "./ThreadView.tsx";
 import { Toast, type ToastData } from "./Toast.tsx";
 import { ChosenColorsContext, LabelOptions } from "./LabelOptions.tsx";
 import { useTheme } from "./theme.ts";
+import { NoteButton, NotePanel, useNoteSaver } from "./NotePanel.tsx";
+import { anyTooBigToSendOnUnload, flushAllOnUnload } from "./noteSaver.ts";
+
+function loadFlag(key: string): boolean {
+  try {
+    return localStorage.getItem(key) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function saveFlag(key: string, v: boolean) {
+  try {
+    localStorage.setItem(key, v ? "1" : "0");
+  } catch {
+    /* private window: just don't remember */
+  }
+}
 
 type After = "stay" | "list" | "next";
 
@@ -51,6 +69,7 @@ export function App() {
   const [toast, setToast] = useState<ToastData | null>(null);
   const lastUndo = useRef<(() => void) | null>(null);
   const [dark, toggleDark] = useTheme();
+  const [noteOpen, setNoteOpen] = useState(() => loadFlag("noteOpen"));
 
   const readOnly = session?.readOnly ?? true;
 
@@ -139,6 +158,33 @@ export function App() {
     const unread = sidebar?.folders.find((f) => f.view === route.view)?.count;
     document.title = `${viewTitle(route.view)}${unread ? ` (${unread})` : ""} - Mail archive`;
   }, [route.view, sidebar]);
+
+  const noteSaver = useNoteSaver(route.threadId ? thread : null, route.threadId);
+  const toggleNote = () =>
+    setNoteOpen((o) => {
+      saveFlag("noteOpen", !o);
+      return !o;
+    });
+
+  // Closing or reloading the page: send unsaved notes with keepalive.
+  useEffect(() => {
+    const onHide = () => flushAllOnUnload();
+    const onVisibility = () => document.visibilityState === "hidden" && flushAllOnUnload();
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (anyTooBigToSendOnUnload()) {
+        e.preventDefault();
+        e.returnValue = ""; // the browser asks "Leave site?"
+      }
+    };
+    window.addEventListener("pagehide", onHide);
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      window.removeEventListener("pagehide", onHide);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("beforeunload", onBeforeUnload);
+    };
+  }, []);
 
   const me = session?.me ?? [];
   const threads = list?.threads ?? [];
@@ -263,7 +309,8 @@ export function App() {
         body: (
           <p>
             Permanently delete {plural(s.messages, "message")} in {plural(s.threads, "conversation")}
-            {s.attachments ? `, including ${plural(s.attachments, "attachment")} (${size(s.attachmentBytes)})` : ""}?{" "}
+            {s.attachments ? `, including ${plural(s.attachments, "attachment")} (${size(s.attachmentBytes)})` : ""}
+            {s.notes ? `, and ${s.notes === 1 ? "1 note" : `${s.notes} notes`}` : ""}?{" "}
             <strong>This can't be undone.</strong>
           </p>
         ),
@@ -418,6 +465,7 @@ export function App() {
               </span>
             )}
             <span className="spacer" />
+            {route.threadId && noteSaver && <NoteButton saver={noteSaver} open={noteOpen} onToggle={toggleNote} />}
             {list && !route.threadId && (
               <span className="pager">
                 {list.total ? `${(pageStart + 1).toLocaleString()}–${(pageStart + threads.length).toLocaleString()} of ${list.total.toLocaleString()}` : ""}
@@ -448,7 +496,12 @@ export function App() {
           {error && <div className="error-banner" onClick={() => setError(null)}>{error}</div>}
           {route.threadId ? (
             thread ? (
-              <ThreadView key={thread.threadId} thread={thread} me={me} view={route.view} onToggleStar={readOnly ? undefined : actions.star} />
+              <div className="thread-area">
+                <ThreadView key={thread.threadId} thread={thread} me={me} view={route.view} onToggleStar={readOnly ? undefined : actions.star} />
+                {noteOpen && noteSaver && noteSaver.threadId === thread.threadId && (
+                  <NotePanel key={thread.threadId} saver={noteSaver} readOnly={readOnly} />
+                )}
+              </div>
             ) : (
               <div className="loading">Loading…</div>
             )

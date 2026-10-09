@@ -6,6 +6,7 @@ import path from "node:path";
 import type { TrashSummary } from "../shared/types.ts";
 import type { Archive, DB } from "./db.ts";
 import { refreshThreads } from "./mutations.ts";
+import { deleteOrphanNotes } from "./notes.ts";
 import { labelId } from "./views.ts";
 
 export class ConflictError extends Error {}
@@ -41,12 +42,24 @@ export function trashSummary(db: DB, threadIds?: string[]): TrashSummary {
     attachments += r.n;
     attachmentBytes += r.b;
   }
-  return { messages: msgs.length, threads: new Set(msgs.map((m) => m.thread_id)).size, attachments, attachmentBytes };
+  return { messages: msgs.length, threads: new Set(msgs.map((m) => m.thread_id)).size, attachments, attachmentBytes, notes: notesDeleted(db, msgs) };
+}
+
+/** Notes that deleting these messages would delete: threads with a note and no other message left. */
+function notesDeleted(db: DB, msgs: Doomed[]): number {
+  const doomedPerThread = new Map<string, number>();
+  for (const m of msgs) doomedPerThread.set(m.thread_id, (doomedPerThread.get(m.thread_id) ?? 0) + 1);
+  const total = db.prepare("SELECT count(*) FROM messages WHERE thread_id = ?").pluck();
+  const hasNote = db.prepare("SELECT 1 FROM thread_notes WHERE thread_id = ?").pluck();
+  let n = 0;
+  for (const [t, k] of doomedPerThread) if (hasNote.get(t) && total.get(t) === k) n++;
+  return n;
 }
 
 export interface DeleteResult {
   messages: number;
   threads: number;
+  notes: number;
   folderErrors: string[];
 }
 
@@ -59,6 +72,7 @@ export function deleteForever(archive: Archive, opts: { threadIds?: string[]; co
   const now = Math.floor(Date.now() / 1000);
   const folders: string[] = [];
   let doomed: Doomed[] = [];
+  let notes = 0;
 
   db.transaction(() => {
     // Re-checked inside the transaction: a stale page can't delete more than its dialog said,
@@ -78,6 +92,7 @@ export function deleteForever(archive: Archive, opts: { threadIds?: string[]; co
       del.run(m.id);
     }
     refreshThreads(db, doomed.map((m) => m.thread_id));
+    notes = deleteOrphanNotes(db, doomed.map((m) => m.thread_id)); // rule 7
   })();
 
   // After the commit: remove each message's attachment folder. Failures are reported, not fatal;
@@ -103,5 +118,5 @@ export function deleteForever(archive: Archive, opts: { threadIds?: string[]; co
     }
   }
   if (folderErrors.length) console.warn("Some attachment folders were not removed:\n  " + folderErrors.join("\n  "));
-  return { messages: doomed.length, threads: new Set(doomed.map((m) => m.thread_id)).size, folderErrors };
+  return { messages: doomed.length, threads: new Set(doomed.map((m) => m.thread_id)).size, notes, folderErrors };
 }

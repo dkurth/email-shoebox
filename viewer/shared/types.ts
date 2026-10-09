@@ -42,6 +42,8 @@ export interface ThreadSummary {
   important: boolean;
   hasAttachments: boolean;
   labels: string[]; // chips: user labels (+ "Inbox" outside the Inbox)
+  hasNote: boolean;
+  noteFirstLine: string | null; // the note's first non-empty line (tooltip; the Notes folder's snippet)
 }
 
 export interface ThreadList {
@@ -91,6 +93,19 @@ export interface ThreadDetail {
   subject: string;
   labels: string[]; // user-label chips for the whole thread
   messages: MessageDetail[];
+  note: NoteInfo | null;
+}
+
+/** A thread's note. Times are Unix milliseconds. */
+export interface NoteInfo {
+  body: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface NoteSaveResult {
+  deleted: boolean;
+  note: NoteInfo | null;
 }
 
 /** One message's label change, as applied; Undo applies the reverse. */
@@ -110,4 +125,5 @@ export interface TrashSummary {
   threads: number;
   attachments: number;
   attachmentBytes: number;
+  notes: number; // notes deleted with their thread (only threads with no message left)
 }
