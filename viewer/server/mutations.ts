@@ -1,7 +1,8 @@
 // Label changes, following gmail2sqlite's "Rules for writers" (SCHEMA.md):
 // keep is_unread/is_starred/is_important in sync, keep pseudo-label pairs consistent,
 // set labels_edited_at (so re-imports keep the change), and refresh the affected threads rows.
-import { SYSTEM_LABELS, applyChange, isCategory, type LabelChange, type View } from "../shared/labels.ts";
+import { SYSTEM_LABELS, applyChange, isCategory, isSearchView, searchQuery, type LabelChange, type View } from "../shared/labels.ts";
+import { searchThreadIds } from "./search.ts";
 import type { AppliedChange, ModifyResult } from "../shared/types.ts";
 import { isLabelColor } from "../shared/labelColors.ts";
 import { chosenColors, saveChosenColors, type DB } from "./db.ts";
@@ -88,6 +89,7 @@ export interface ModifyRequest extends LabelChange {
   all?: boolean; // every thread in the view (Gmail's "select all N conversations")
   view: View;
   target?: "all" | "newest"; // which messages of each thread; default all in the view's context
+  me?: string[]; // the owner's addresses (for "select all" in a search with from:me)
 }
 
 function validLabel(name: unknown): string {
@@ -98,6 +100,7 @@ function validLabel(name: unknown): string {
 }
 
 function threadIdsFor(db: DB, req: ModifyRequest): string[] {
+  if (req.all && isSearchView(req.view)) return searchThreadIds(db, searchQuery(req.view), req.me ?? []);
   if (req.all) {
     const v = viewSql(db, req.view);
     return db.prepare(`SELECT DISTINCT m.thread_id FROM ${v.from} WHERE ${v.sql}`).pluck().all(...v.params) as string[];

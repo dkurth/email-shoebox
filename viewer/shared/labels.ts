@@ -1,4 +1,5 @@
 // Gmail's folders and label rules, shared by the server and the web front end.
+import { parseQuery, searchContext } from "./search.ts";
 
 export interface FolderDef {
   id: string; // used in URLs: #/inbox
@@ -24,6 +25,11 @@ export const FOLDERS: FolderDef[] = [
 
 export const isNotesView = (view: View) => view === "notes";
 
+/** Search results: "search:<query>". */
+export const SEARCH_PREFIX = "search:";
+export const isSearchView = (view: View) => view.startsWith(SEARCH_PREFIX);
+export const searchQuery = (view: View) => view.slice(SEARCH_PREFIX.length);
+
 /** Labels Gmail uses internally; never shown as user labels. */
 export const SYSTEM_LABELS = new Set([
   "Inbox", "Sent", "Drafts", "Spam", "Trash", "Starred", "Important", "Unread", "Chat",
@@ -36,22 +42,28 @@ export const isCategory = (name: string) => name.startsWith(CATEGORY_PREFIX);
 export const categoryName = (name: string) => name.slice(CATEGORY_PREFIX.length);
 export const isUserLabel = (name: string) => !SYSTEM_LABELS.has(name) && !isCategory(name);
 
-/** A view is a folder id ("inbox") or "label:<label name>" (user labels and categories). */
+/** A view is a folder id ("inbox"), "label:<label name>" (user labels and categories) or "search:<query>". */
 export type View = string;
 
 export function viewLabel(view: View): string | null {
   if (view.startsWith("label:")) return view.slice("label:".length);
+  if (isSearchView(view)) return null;
   const f = FOLDERS.find((f) => f.id === view);
   if (!f) throw new Error(`unknown view: ${view}`);
   return f.label;
 }
 
-/** Which messages a view (and actions taken in it) can see: Trash and Spam hide mail everywhere else. */
-export function viewContext(view: View): "trash" | "spam" | "normal" {
+/**
+ * Which messages a view (and actions taken in it) can see: Trash and Spam hide mail everywhere else.
+ * A search sees Trash or Spam only with in:trash, in:spam or in:anywhere ("all").
+ */
+export function viewContext(view: View): "trash" | "spam" | "normal" | "all" {
+  if (isSearchView(view)) return searchContext(parseQuery(searchQuery(view)));
   return view === "trash" ? "trash" : view === "spam" ? "spam" : "normal";
 }
 
 export function viewTitle(view: View): string {
+  if (isSearchView(view)) return searchQuery(view);
   if (view.startsWith("label:")) {
     const name = view.slice("label:".length);
     return isCategory(name) ? categoryName(name) : name;
@@ -87,6 +99,10 @@ export function removeAction(view: View): RemoveAction | null {
       return { add: ["Inbox"], remove: ["Trash"], button: "Move to Inbox", done: (n) => `${conv(n)} moved to Inbox.` };
     case "spam":
       return { add: ["Inbox"], remove: ["Spam"], button: "Not spam", done: (n) => `${conv(n)} moved to Inbox.` };
+  }
+  if (isSearchView(view)) {
+    // Gmail shows Archive in search results.
+    return { add: [], remove: ["Inbox"], button: "Archive", done: (n) => `${conv(n)} archived.` };
   }
   if (view.startsWith("label:")) {
     const name = view.slice("label:".length);

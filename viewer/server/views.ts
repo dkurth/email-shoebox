@@ -39,6 +39,7 @@ interface Sql {
 /** Messages a view's context allows: Trash and Spam hide mail everywhere else. Alias: m. */
 export function contextSql(db: DB, view: View): Sql {
   const ctx = viewContext(view);
+  if (ctx === "all") return { sql: "1", params: [] };
   if (ctx === "trash" || ctx === "spam") {
     return { sql: "EXISTS (SELECT 1 FROM message_labels x WHERE x.message_id = m.id AND x.label_id = ?)", params: [labelId(db, ctx === "trash" ? "Trash" : "Spam") ?? -1] };
   }
@@ -361,7 +362,8 @@ export function threadDetail(db: DB, threadId: string, view: View): ThreadDetail
   const addrs = (json: string | null): Address[] => (json ? JSON.parse(json) : []);
   const messages: MessageDetail[] = rows.map((r) => {
     const ls = labels.get(r.id) ?? [];
-    const inContext = ctx === "trash" ? ls.includes("Trash") : ctx === "spam" ? ls.includes("Spam") : !ls.includes("Trash") && !ls.includes("Spam");
+    const inContext =
+      ctx === "all" ? true : ctx === "trash" ? ls.includes("Trash") : ctx === "spam" ? ls.includes("Spam") : !ls.includes("Trash") && !ls.includes("Spam");
     return {
       id: r.id,
       gmailId: r.gmail_id,

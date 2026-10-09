@@ -9,6 +9,8 @@ import { InputError, createLabel, deleteLabel, modifyThreads, setLabelColor, set
 import { guard } from "./security.ts";
 import { ConflictError, deleteForever, trashSummary } from "./trash.ts";
 import { listThreads, original, sidebar, threadDetail } from "./views.ts";
+import { searchThreads } from "./search.ts";
+import { isSearchView, searchQuery } from "../shared/labels.ts";
 import { NoteConflict, NotFound, saveNote } from "./notes.ts";
 import { collectNotes, exportFilename, toCsv, toMarkdown } from "./exportNotes.ts";
 
@@ -70,8 +72,13 @@ export function createApp(opts: AppOptions): Hono {
   app.get("/api/sidebar", (c) => c.json(sidebar(db)));
 
   app.get("/api/threads", (c) => {
-    return c.json(listThreads(db, viewParam(c.req.query("view")), intParam(c.req.query("page"), 1), opts.me));
+    const view = viewParam(c.req.query("view"));
+    const page = intParam(c.req.query("page"), 1);
+    if (isSearchView(view)) return c.json(searchThreads(db, searchQuery(view), page, opts.me));
+    return c.json(listThreads(db, view, page, opts.me));
   });
+
+  app.get("/api/search", (c) => c.json(searchThreads(db, c.req.query("q") ?? "", intParam(c.req.query("page"), 1), opts.me)));
 
   app.get("/api/threads/:threadId", (c) => {
     const t = threadDetail(db, c.req.param("threadId"), viewParam(c.req.query("view")));
@@ -102,7 +109,7 @@ export function createApp(opts: AppOptions): Hono {
   // ---- writes (the guard already refused them in read-only mode)
   app.post("/api/threads/modify", async (c) => {
     const body = await c.req.json();
-    return c.json(modifyThreads(db, { ...body, view: viewParam(body.view) }));
+    return c.json(modifyThreads(db, { ...body, view: viewParam(body.view), me: opts.me }));
   });
   app.post("/api/threads/star", async (c) => {
     const body = await c.req.json();

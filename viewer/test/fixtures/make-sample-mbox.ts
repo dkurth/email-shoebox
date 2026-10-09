@@ -19,6 +19,7 @@ interface Msg {
   text?: string;
   html?: string;
   attachments?: { name: string; type: string; data: Buffer; cid?: string }[];
+  headers?: string[]; // extra header lines
 }
 
 let nextId = 1700000000000000001n;
@@ -83,6 +84,7 @@ function thread(msgs: Msg[]): string {
       `From: ${encodeWord(m.from)}`,
       `To: ${m.to}`,
       ...(m.cc ? [`Cc: ${m.cc}`] : []),
+      ...(m.headers ?? []),
       `Subject: ${encodeWord(m.subject)}`,
       `Date: ${date.toUTCString().replace("GMT", "+0000")}`,
       `Message-ID: ${msgId}`,
@@ -125,6 +127,13 @@ thread([{ from: CAROL, to: ME, subject: "Holiday media", labels: ["Archived", "O
           ] }]);
 thread([{ from: BOB, to: ME, subject: "Fwd: Holiday media", labels: ["Archived", "Opened", "Media"], text: "Same sunset again.\n",
           attachments: [{ name: "sunset.jpg", type: "image/jpeg", data: media("sunset.jpg") }] }]);
+
+// Mailing lists (List-Id), also old.
+const LIST = "Hike Club <club@hikers.example>";
+thread([{ from: LIST, to: ME, subject: "Saturday hike", labels: ["Archived", "Opened"], text: "Meet at the trailhead.\n",
+          headers: ["List-Id: Hike Club Announcements <announce.hikers.example>"] }]);
+thread([{ from: LIST, to: ME, subject: "Trail report", labels: ["Archived", "Unread"], text: "Muddy but fine.\n",
+          headers: ["List-Id: Hike Club Announcements <announce.hikers.example>"] }]);
 
 // Filler next, so the interesting threads are the newest.
 for (let i = 1; i <= 55; i++) {
