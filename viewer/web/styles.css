@@ -164,3 +164,4 @@ kbd { background: var(--chip); border-radius: 4px; padding: 1px 6px; font: 12px 
 .toolbar .text-button { font-size: 13px; }
 .topbar .spacer { flex: 1; }
 .actions { display: flex; gap: 6px; flex-wrap: wrap; margin-left: 8px; }
+.trash-bar { background: var(--hover); padding: 10px 16px; display: flex; gap: 12px; justify-content: center; font-size: 13px; }

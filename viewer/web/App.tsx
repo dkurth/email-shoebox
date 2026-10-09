@@ -11,8 +11,10 @@ import type {
   ThreadDetail,
   ThreadList as ThreadListData,
   ThreadSummary,
+  TrashSummary,
 } from "../shared/types.ts";
 import { get, post, q } from "./api.ts";
+import { size } from "./format.ts";
 import { ConfirmDialog, type ConfirmData } from "./ConfirmDialog.tsx";
 import { useKeyboard } from "./keyboard.ts";
 import { LabelMenu } from "./LabelMenu.tsx";
@@ -220,7 +222,7 @@ export function App() {
   const actions = {
     remove: () => remove && run("/api/threads/modify", { add: remove.add, remove: remove.remove }, remove.done, "list"),
     trash: () => {
-      if (route.view === "trash") return; // "Delete forever" lives in the Trash toolbar
+      if (route.view === "trash") return deleteForever(allInView ? undefined : targetIds());
       run("/api/threads/modify", { add: ["Trash"], remove: [] }, (n) => `${conv(n)} moved to Trash.`, "next");
     },
     star: () => {
@@ -234,6 +236,45 @@ export function App() {
       if (readOnly) return showToast("This viewer is read-only.");
       if (targetIds().length || allInView) setLabelMenu(true);
     },
+  };
+
+  /** Permanent delete, always confirmed with real numbers first. No threadIds = empty the whole Trash. */
+  const deleteForever = async (threadIds?: string[]) => {
+    if (readOnly) return showToast("This viewer is read-only.");
+    if (threadIds && !threadIds.length) return;
+    try {
+      const s = await post<TrashSummary>("/api/trash/summary", threadIds ? { threadIds } : {});
+      if (!s.messages) return showToast("Nothing to delete.");
+      const plural = (n: number, w: string) => `${n.toLocaleString()} ${w}${n === 1 ? "" : "s"}`;
+      setConfirm({
+        title: threadIds ? "Delete forever?" : "Empty Trash?",
+        body: (
+          <p>
+            Permanently delete {plural(s.messages, "message")} in {plural(s.threads, "conversation")}
+            {s.attachments ? `, including ${plural(s.attachments, "attachment")} (${size(s.attachmentBytes)})` : ""}?{" "}
+            <strong>This can't be undone.</strong>
+          </p>
+        ),
+        confirmText: "Delete forever",
+        danger: true,
+        onConfirm: async () => {
+          setConfirm(null);
+          try {
+            const r = await post<{ messages: number; folderErrors: string[] }>(
+              threadIds ? "/api/threads/delete-forever" : "/api/trash/empty",
+              threadIds ? { threadIds, confirmCount: s.messages } : { confirmCount: s.messages },
+            );
+            afterAction(route.threadId ? "list" : "stay");
+            showToast(`${plural(r.messages, "message")} deleted forever.${r.folderErrors.length ? " Some attachment files could not be removed; see the server log." : ""}`);
+          } catch (e) {
+            setError((e as Error).message);
+            reload();
+          }
+        },
+      });
+    } catch (e) {
+      setError((e as Error).message);
+    }
   };
 
   const applyLabels = async (add: string[], removeLabels: string[], create: string[]) => {
@@ -343,6 +384,7 @@ export function App() {
             <span className="actions">
               {remove && <button className="text-button" title={`${remove.button} (y)`} onClick={actions.remove}>{remove.button}</button>}
               {route.view !== "trash" && <button className="text-button" title="Move to Trash (#)" onClick={actions.trash}>Move to Trash</button>}
+              {route.view === "trash" && <button className="text-button danger" title="Delete forever (#)" onClick={actions.trash}>Delete forever</button>}
               <button className="text-button" title="Label as (l)" onClick={actions.labels}>Labels ▾</button>
               <button className="text-button" title="Mark as read (Shift-i)" onClick={actions.read}>Mark read</button>
               <button className="text-button" title="Mark as unread (Shift-u)" onClick={actions.unread}>Mark unread</button>
@@ -369,6 +411,12 @@ export function App() {
             ) : (
               <>All {threads.length} conversations on this page are selected. <button className="link-button" onClick={() => setAllInView(true)}>Select all {list.total.toLocaleString()} conversations in {viewTitle(route.view)}</button></>
             )}
+          </div>
+        )}
+        {route.view === "trash" && !route.threadId && !readOnly && !!list?.total && (
+          <div className="trash-bar">
+            Conversations stay in Trash until you delete them.
+            <button className="link-button" onClick={() => deleteForever()}>Empty Trash now</button>
           </div>
         )}
         {error && <div className="error-banner" onClick={() => setError(null)}>{error}</div>}

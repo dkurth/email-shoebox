@@ -7,6 +7,7 @@ import { serveAttachment } from "./attachments.ts";
 import type { Archive } from "./db.ts";
 import { InputError, createLabel, deleteLabel, modifyThreads, setStar, undoChanges } from "./mutations.ts";
 import { guard } from "./security.ts";
+import { ConflictError, deleteForever, trashSummary } from "./trash.ts";
 import { listThreads, original, sidebar, threadDetail } from "./views.ts";
 
 export class BadRequest extends Error {}
@@ -38,6 +39,7 @@ export function createApp(opts: AppOptions): Hono {
     if (err instanceof BadRequest || err instanceof InputError || err instanceof SyntaxError || err.message.startsWith("unknown view")) {
       return c.json({ error: err.message }, 400);
     }
+    if (err instanceof ConflictError) return c.json({ error: err.message }, 409);
     console.error(err);
     return c.json({ error: err.message }, 500);
   });
@@ -93,6 +95,19 @@ export function createApp(opts: AppOptions): Hono {
   app.post("/api/undo", async (c) => {
     const body = await c.req.json();
     return c.json({ undone: undoChanges(db, body.changes) });
+  });
+  app.post("/api/trash/summary", async (c) => {
+    const body = await c.req.json();
+    return c.json(trashSummary(db, Array.isArray(body.threadIds) ? body.threadIds : undefined));
+  });
+  app.post("/api/trash/empty", async (c) => {
+    const body = await c.req.json();
+    return c.json(deleteForever(archive, { confirmCount: body.confirmCount }));
+  });
+  app.post("/api/threads/delete-forever", async (c) => {
+    const body = await c.req.json();
+    if (!Array.isArray(body.threadIds)) throw new BadRequest("threadIds must be a list");
+    return c.json(deleteForever(archive, { threadIds: body.threadIds, confirmCount: body.confirmCount }));
   });
   app.post("/api/labels", async (c) => c.json(createLabel(db, (await c.req.json()).name)));
   app.delete("/api/labels/:id", (c) => c.json(deleteLabel(db, intParam(c.req.param("id")))));
