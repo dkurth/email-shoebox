@@ -107,6 +107,13 @@ sqlite3 gmail-archive/mail.db \
    ORDER BY received_utc DESC LIMIT 20"
 ```
 
+### 3. Read it like Gmail
+
+[local-gmail-viewer](../local-gmail-viewer) is a separate project: a Gmail-like
+viewer for these archives that runs locally (`npm start -- ../gmail-archive`).
+Its label changes and deletes follow the "Rules for writers" in SCHEMA.md, so
+later imports keep them.
+
 ## How it works
 
 - `sources.py` opens each input as a byte stream (gzip and tar in streaming mode,
