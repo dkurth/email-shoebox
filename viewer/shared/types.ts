@@ -276,3 +276,9 @@ export interface GalleryPage {
   years: number[]; // years that have images (for the filter)
   senders: string[]; // the 50 senders with the most images (suggestions)
 }
+
+/** Progress of Compact database: mail.db (+ WAL) size in bytes, before and after. */
+export interface CompactProgress {
+  before: number;
+  after: number | null;
+}

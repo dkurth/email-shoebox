@@ -162,6 +162,18 @@ export function createApp(opts: AppOptions): Hono {
       }),
     );
   });
+  app.get("/api/admin/compact", (c) => c.json(jobState("compact")));
+  app.post("/api/admin/compact", (c) => {
+    // VACUUM writes a full new copy of the database before it replaces the old one.
+    const dbFile = path.join(archive.dir, "mail.db");
+    const need = fs.statSync(dbFile).size * 1.1;
+    const st = fs.statfsSync(archive.dir);
+    const free = st.bavail * st.bsize;
+    if (free < need) {
+      throw new ConflictError(`Compacting needs about ${Math.ceil(need / 1e9)} GB of free disk space; there is ${(free / 1e9).toFixed(1)} GB.`);
+    }
+    return c.json(startJob("compact", new URL("./compactWorker.ts", import.meta.url), { archiveDir: archive.dir }));
+  });
   app.get("/api/admin/dedupe", (c) => c.json(jobState("dedupe")));
   app.post("/api/admin/dedupe", (c) => c.json(startJob("dedupe", new URL("./dedupeWorker.ts", import.meta.url), { archiveDir: archive.dir })));
   app.get("/api/admin/person", (c) => {

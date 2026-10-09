@@ -345,3 +345,4 @@ mark.hl { background: #fde293; color: inherit; border-radius: 2px; }
 .gallery .tile:focus-visible { outline: 3px solid var(--accent); }
 .tile-date { color: var(--muted); font-size: 11px; margin-top: 4px; }
 .admin-images .report-filters .pager { margin-left: auto; }
+.maintenance p { max-width: 720px; }

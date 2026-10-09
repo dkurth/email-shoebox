@@ -613,3 +613,12 @@ test("Images tab: the grid, the lightbox moves between images, Delete removes on
   await page.keyboard.press("Escape");
   await expect(page.locator(".gallery li")).toHaveCount(3); // the other sunset.jpg copy shows now
 });
+
+test("Maintenance: Compact database runs and reports the sizes", async ({ page }) => {
+  server = await startServer();
+  await page.goto(server.url + "#/admin/maintenance");
+  await expect(page.locator(".maintenance")).toContainText("free space inside it");
+  await page.getByRole("button", { name: "Compact database" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Compact" }).click();
+  await expect(page.locator(".job-result")).toContainText("Done:");
+});

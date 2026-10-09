@@ -8,6 +8,7 @@ import { go } from "./route.ts";
 import { PeopleTab, PersonPage } from "./AdminPeople.tsx";
 import { AttachmentsTab } from "./AdminAttachments.tsx";
 import { ImagesTab } from "./AdminImages.tsx";
+import { MaintenanceTab } from "./AdminMaintenance.tsx";
 
 export interface AdminTab {
   id: string;
@@ -301,7 +302,7 @@ function Imports() {
 
 // Tabs that later steps add register here (set to true when the tab exists).
 const PEOPLE_TAB = true;
-const MAINTENANCE_TAB = false;
+const MAINTENANCE_TAB = true;
 
 export const TABS: AdminTab[] = [
   { id: "overview", name: "Overview", render: (p) => <Overview {...p} /> },
@@ -309,6 +310,7 @@ export const TABS: AdminTab[] = [
   { id: "attachments", name: "Attachments", render: (p) => <AttachmentsTab {...p} /> },
   { id: "images", name: "Images", render: (p) => <ImagesTab {...p} /> },
   { id: "imports", name: "Imports", render: () => <Imports /> },
+  { id: "maintenance", name: "Maintenance", render: (p) => <MaintenanceTab {...p} /> },
 ];
 
 // Pages under a tab, not shown as tabs themselves.
