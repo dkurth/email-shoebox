@@ -71,8 +71,12 @@ function HtmlBody({ html, attachments }: { html: string; attachments: Attachment
       if (!doc?.documentElement) return;
       f.style.height = `${Math.max(doc.documentElement.scrollHeight, doc.body?.scrollHeight ?? 0) + 4}px`;
     };
+    // Keys pressed after clicking inside the email still reach the app's shortcuts.
+    const forward = (e: KeyboardEvent) =>
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: e.key, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey }));
     const onLoad = () => {
       fit();
+      f.contentDocument?.addEventListener("keydown", forward);
       const body = f.contentDocument?.body;
       if (body) {
         observer = new ResizeObserver(fit);

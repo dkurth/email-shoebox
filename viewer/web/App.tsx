@@ -3,7 +3,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { viewTitle } from "../shared/labels.ts";
 import type { Session, Sidebar as SidebarData, ThreadDetail, ThreadList as ThreadListData } from "../shared/types.ts";
 import { get, q } from "./api.ts";
+import { useKeyboard } from "./keyboard.ts";
 import { go, parseHash, type Route } from "./route.ts";
+import { ShortcutHelp } from "./ShortcutHelp.tsx";
 import { Sidebar } from "./Sidebar.tsx";
 import { ThreadList } from "./ThreadList.tsx";
 import { ThreadView } from "./ThreadView.tsx";
@@ -19,6 +21,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [listVersion, setListVersion] = useState(0); // bump to reload the list
   const lastOpened = useRef<string | null>(null);
+  const [help, setHelp] = useState(false);
 
   useEffect(() => {
     if (!location.hash) history.replaceState(null, "", "#/inbox");
@@ -69,6 +72,13 @@ export function App() {
     };
   }, [route.threadId, route.view]);
 
+  // Keep the list cursor on the open thread (also when it was opened from a URL).
+  useEffect(() => {
+    if (!route.threadId || !list) return;
+    const i = list.threads.findIndex((t) => t.threadId === route.threadId);
+    if (i >= 0) setCursor(i);
+  }, [route.threadId, list]);
+
   useEffect(() => {
     const unread = sidebar?.folders.find((f) => f.view === route.view)?.count;
     document.title = `${viewTitle(route.view)}${unread ? ` (${unread})` : ""} - Mail archive`;
@@ -85,6 +95,37 @@ export function App() {
       else next.add(id);
       return next;
     });
+
+  const threads = list?.threads ?? [];
+  const open = (i: number) => {
+    const t = threads[i];
+    if (t) go({ view: route.view, page: route.page, threadId: t.threadId });
+  };
+  const backToList = () => go({ view: route.view, page: route.page });
+  // In a thread, j/k open the older/newer conversation from the list.
+  const step = (delta: number) => {
+    const i = Math.max(0, Math.min(threads.length - 1, cursor + delta));
+    setCursor(i);
+    if (route.threadId && i !== cursor) open(i);
+  };
+
+  useKeyboard(
+    {
+      j: () => step(1),
+      k: () => step(-1),
+      x: () => !route.threadId && threads[cursor] && toggleSelect(threads[cursor].threadId),
+      Enter: () => !route.threadId && open(cursor),
+      o: () => !route.threadId && open(cursor),
+      u: () => route.threadId && backToList(),
+      Escape: () => (help ? setHelp(false) : route.threadId ? backToList() : setSelected(new Set())),
+      "?": () => setHelp((h) => !h),
+      "g i": () => go({ view: "inbox" }),
+      "g s": () => go({ view: "starred" }),
+      "g t": () => go({ view: "sent" }),
+      "g a": () => go({ view: "all" }),
+      "g d": () => go({ view: "drafts" }),
+    },
+  );
 
   return (
     <div className="app">
@@ -132,6 +173,7 @@ export function App() {
           thread ? <ThreadView key={thread.threadId} thread={thread} me={me} view={route.view} /> : <div className="loading">Loading…</div>
         ) : list ? (
           <ThreadList
+            key={`${route.view}/${route.page}`}
             data={list}
             cursor={cursor}
             selected={selected}
@@ -143,6 +185,7 @@ export function App() {
           <div className="loading">Loading…</div>
         )}
       </main>
+      {help && <ShortcutHelp onClose={() => setHelp(false)} />}
     </div>
   );
 }
