@@ -130,3 +130,48 @@ describe("the Notes folder", () => {
     expect(r.body.threads).toBe(1);
   });
 });
+
+describe("notes export", () => {
+  async function threeNotes() {
+    const ctx = setup();
+    await put(ctx, threadOf(ctx, "Trip planning"), { body: 'Book flights, "cheap" ones\n# not a heading\nline 3', expectedUpdatedAt: null });
+    await put(ctx, threadOf(ctx, "Old coupon"), { body: "in the trash", expectedUpdatedAt: null });
+    await put(ctx, threadOf(ctx, "Pancake recipe"), { body: "Buttermilk", expectedUpdatedAt: null });
+    return ctx;
+  }
+
+  it("writes Markdown, newest note first", async () => {
+    const ctx = await threeNotes();
+    const r = await ctx.get("/api/admin/notes/export?format=md");
+    expect(r.status).toBe(200);
+    expect(r.res.headers.get("content-type")).toBe("text/markdown; charset=utf-8");
+    expect(r.res.headers.get("content-disposition")).toMatch(/^attachment; filename="notes-\d{4}-\d\d-\d\d\.md"/);
+    const md = r.body as string;
+    const headings = md.split("\n").filter((l) => l.startsWith("## "));
+    expect(headings).toEqual(["## Pancake recipe", "## Old coupon", "## Trip planning"]);
+    expect(md).toContain("\\# not a heading");
+    expect(md).toMatch(/- Thread: \d+ · 3 messages · Jan \d+, 2024 – Jan \d+, 2024\n/);
+    expect(md).toContain("- People: Alice Adams <alice@example.com>, me, Bob Brown <bob@example.com>");
+    expect(md).toContain("- Labels: Travel/2024");
+    expect(md).toMatch(/Old coupon\n- Thread: \d+ · 1 message · .* · in Trash/);
+  });
+
+  it("writes CSV with a BOM and RFC 4180 quoting", async () => {
+    const ctx = await threeNotes();
+    const res = await ctx.app.request("/api/admin/notes/export?format=csv", { headers: { host: "127.0.0.1:5178" } });
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    expect([...bytes.slice(0, 3)]).toEqual([0xef, 0xbb, 0xbf]); // the BOM (text() would hide it)
+    const csv = new TextDecoder("utf-8", { ignoreBOM: true }).decode(bytes);
+    expect(csv.startsWith("\ufeffthread_id,subject,first_date,last_date,message_count,people,labels,in_trash_or_spam,note_created,note_updated,note\r\n")).toBe(true);
+    expect(csv).toContain(`"Book flights, ""cheap"" ones\n# not a heading\nline 3"`);
+    expect(csv).toMatch(/,Old coupon,[^\r]*,Trash,/);
+    expect(csv).toMatch(/,\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d,/);
+    expect(csv.trimEnd().split("\r\n")).toHaveLength(4); // header + 3 notes (one has new lines inside quotes)
+  });
+
+  it("works in read-only mode and refuses unknown formats", async () => {
+    const ro = setup({ readOnly: true });
+    expect((await ro.get("/api/admin/notes/export?format=md")).status).toBe(200);
+    expect((await ro.get("/api/admin/notes/export?format=pdf")).status).toBe(400);
+  });
+});

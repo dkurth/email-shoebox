@@ -3,13 +3,14 @@ import { Hono } from "hono";
 import fs from "node:fs";
 import path from "node:path";
 import { viewLabel, type View } from "../shared/labels.ts";
-import { serveAttachment } from "./attachments.ts";
+import { contentDisposition, serveAttachment } from "./attachments.ts";
 import type { Archive } from "./db.ts";
 import { InputError, createLabel, deleteLabel, modifyThreads, setLabelColor, setStar, undoChanges } from "./mutations.ts";
 import { guard } from "./security.ts";
 import { ConflictError, deleteForever, trashSummary } from "./trash.ts";
 import { listThreads, original, sidebar, threadDetail } from "./views.ts";
 import { NoteConflict, NotFound, saveNote } from "./notes.ts";
+import { collectNotes, exportFilename, toCsv, toMarkdown } from "./exportNotes.ts";
 
 export class BadRequest extends Error {}
 
@@ -80,6 +81,19 @@ export function createApp(opts: AppOptions): Hono {
   app.get("/api/messages/:id/original", (c) => {
     const text = original(db, intParam(c.req.param("id")));
     return text === null ? c.json({ error: "No such message" }, 404) : c.text(text, 200, { "X-Content-Type-Options": "nosniff" });
+  });
+
+  app.get("/api/admin/notes/export", (c) => {
+    const format = c.req.query("format") ?? "md";
+    if (format !== "md" && format !== "csv") throw new BadRequest("format must be md or csv");
+    const notes = collectNotes(db, opts.me);
+    const text = format === "md" ? toMarkdown(notes) : toCsv(notes);
+    return c.body(text, 200, {
+      "Content-Type": format === "md" ? "text/markdown; charset=utf-8" : "text/csv; charset=utf-8",
+      "Content-Disposition": contentDisposition("attachment", exportFilename(format)),
+      "X-Content-Type-Options": "nosniff",
+      "Cache-Control": "no-store",
+    });
   });
 
   app.get("/api/attachments/:id/download", (c) => serveAttachment(c, archive, intParam(c.req.param("id")), "download"));
