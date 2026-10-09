@@ -1,7 +1,5 @@
 import { createRoot } from "react-dom/client";
+import { App } from "./App.tsx";
+import "./styles.css";
 
-function Placeholder() {
-  return <p>Mail archive viewer: the server is running.</p>;
-}
-
-createRoot(document.getElementById("root")!).render(<Placeholder />);
+createRoot(document.getElementById("root")!).render(<App />);
