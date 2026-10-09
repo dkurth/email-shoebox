@@ -202,7 +202,7 @@ export function App() {
     reload();
   };
 
-  const run = async (url: string, body: object, done: (n: number) => string, after: After) => {
+  const run = async (url: string, body: object, done: (n: number) => string, after: After, opts: { undo?: boolean } = {}) => {
     if (readOnly) return showToast("This viewer is read-only.");
     const ids = targetIds();
     if (!ids.length && !allInView) return;
@@ -210,7 +210,7 @@ export function App() {
     try {
       const r = await post<ModifyResult>(url, payload);
       afterAction(after);
-      showToast(done(r.threads), r.changes.length ? undo(r.changes) : undefined);
+      showToast(done(r.threads), opts.undo !== false && r.changes.length ? undo(r.changes) : undefined);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -228,7 +228,8 @@ export function App() {
     star: () => {
       const ts = route.threadId ? [thread] : targetSummaries();
       const starred = !(route.threadId ? thread?.messages.some((m) => m.starred) : ts[0] && (ts[0] as ThreadSummary).starred);
-      run("/api/threads/star", { starred }, (n) => `${conv(n)} ${starred ? "starred" : "unstarred"}.`, "stay");
+      // Starring is undone by starring again, so it offers no Undo.
+      run("/api/threads/star", { starred }, (n) => `${conv(n)} ${starred ? "starred" : "unstarred"}.`, "stay", { undo: false });
     },
     read: () => run("/api/threads/modify", { add: [], remove: ["Unread"] }, (n) => `${conv(n)} marked as read.`, "stay"),
     unread: () => run("/api/threads/modify", { add: ["Unread"], remove: [], target: "newest" }, (n) => `${conv(n)} marked as unread.`, "list"),
@@ -424,7 +425,7 @@ export function App() {
             cursor={cursor}
             selected={selected}
             onToggleSelect={toggleSelect}
-            onToggleStar={readOnly ? undefined : (t) => run("/api/threads/star", { starred: !t.starred, threadIds: [t.threadId] }, (n) => `${conv(n)} ${t.starred ? "unstarred" : "starred"}.`, "stay")}
+            onToggleStar={readOnly ? undefined : (t) => run("/api/threads/star", { starred: !t.starred, threadIds: [t.threadId] }, (n) => `${conv(n)} ${t.starred ? "unstarred" : "starred"}.`, "stay", { undo: false })}
             onCursor={setCursor}
             onOpen={(t) => go({ view: route.view, page: route.page, threadId: t.threadId })}
           />

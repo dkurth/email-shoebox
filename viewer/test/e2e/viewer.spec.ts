@@ -130,3 +130,19 @@ test("Expand all shows only when a message is collapsed", async ({ page }) => {
   await expect(page.locator(".msg.collapsed")).toHaveCount(0);
   await expect(page.locator(".expand-all")).toHaveCount(0);
 });
+
+test("starring offers no Undo, and z does not undo an older action", async ({ page }) => {
+  server = await startServer();
+  await page.goto(server.url);
+  await expect(subjects(page)).toHaveCount(5);
+  await page.keyboard.press("#"); // trash "Welcome to the archive" (Undo offered)
+  await expect(page.locator(".toast-undo")).toBeVisible();
+  await page.keyboard.press("s");
+  await expect(page.locator(".toast")).toContainText("Conversation starred.");
+  await expect(page.locator(".toast-undo")).toHaveCount(0);
+  await page.keyboard.press("z");
+  await expect(subjects(page)).toHaveCount(4); // the trash was not undone
+  await page.locator(".thread-row").first().locator(".star").click();
+  await expect(page.locator(".toast")).toContainText("Conversation unstarred.");
+  await expect(page.locator(".toast-undo")).toHaveCount(0);
+});
