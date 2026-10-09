@@ -1,5 +1,6 @@
 // The admin page (#/admin): archive statistics, in tabs. Each tab has its own URL.
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { FOLDERS, isCategory, categoryName } from "../shared/labels.ts";
 import type { AdminImport, AdminLabel, AdminOverview, AdminPerson } from "../shared/types.ts";
 import { get } from "./api.ts";
@@ -63,7 +64,7 @@ export function SortHeader({ label, active, desc, numeric, onClick }: { label: R
       {onClick ? (
         <button className="sort-button" onClick={onClick}>
           {label}
-          {active ? (desc ? " ▾" : " ▴") : ""}
+          {active && (desc ? <ChevronDown size={14} /> : <ChevronUp size={14} />)}
         </button>
       ) : (
         label

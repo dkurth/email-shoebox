@@ -1,6 +1,7 @@
 // The admin page's Attachments tab: totals by type and sender, then every attachment, biggest first.
 // The filters live in the URL (#/admin/attachments?type=Video&min=10485760), so Back works.
 import { useEffect, useState, type ReactNode } from "react";
+import { ChevronDown, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { TYPE_GROUPS } from "../shared/fileTypes.ts";
 import { previewKind } from "../shared/preview.ts";
 import type { AttachmentRow, AttachmentSummary, DedupeProgress, DupeGroup, JobState } from "../shared/types.ts";
@@ -47,7 +48,7 @@ function Summary({ inline, setParams, version }: { inline: boolean; setParams: A
                 <tr>
                   <td>
                     <button className="tree-toggle" aria-label={open.has(g.group) ? "Hide types" : "Show types"} onClick={() => setOpen((o) => { const n = new Set(o); if (n.has(g.group)) n.delete(g.group); else n.add(g.group); return n; })}>
-                      {open.has(g.group) ? "▾" : "▸"}
+                      {open.has(g.group) ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                     </button>
                     <a href="#" onClick={(e) => { e.preventDefault(); setParams({ type: g.group, page: null }); }}>{g.group}</a>
                   </td>
@@ -114,7 +115,7 @@ function Filters({ params, setParams }: AdminProps) {
       {from && (
         <span className="filter-chip">
           From {from}
-          <button aria-label="Clear the sender filter" onClick={() => setParams({ from: null, page: null })}>✕</button>
+          <button aria-label="Clear the sender filter" onClick={() => setParams({ from: null, page: null })}><X size={14} /></button>
         </span>
       )}
       <label>
@@ -179,8 +180,8 @@ export function AttachmentList(props: AdminProps & ReportExtras & { version?: nu
         {props.barStart?.(data.rows, data.total)}
         <span className="pager">
           {data.total ? `${num(start + 1)}–${num(Math.min(data.total, start + PAGE))} of ${num(data.total)}` : "No attachments match."}
-          <button className="icon-button" title="Previous" disabled={page <= 1} onClick={() => setParams({ page: page - 1 > 1 ? page - 1 : null })}>‹</button>
-          <button className="icon-button" title="Next" disabled={start + PAGE >= data.total} onClick={() => setParams({ page: page + 1 })}>›</button>
+          <button className="icon-button" title="Previous" disabled={page <= 1} onClick={() => setParams({ page: page - 1 > 1 ? page - 1 : null })}><ChevronLeft size={20} /></button>
+          <button className="icon-button" title="Next" disabled={start + PAGE >= data.total} onClick={() => setParams({ page: page + 1 })}><ChevronRight size={20} /></button>
         </span>
       </div>
       <table className="admin-table report">
@@ -260,8 +261,8 @@ function DupeList(props: AdminProps & { version: number; onDeleteCopies?: (g: Du
         {selection?.bar(rows, total)}
         <span className="pager">
           {total ? `${num(start + 1)}–${num(Math.min(total, start + PAGE))} of ${num(total)} files` : "No duplicates match."}
-          <button className="icon-button" title="Previous" disabled={page <= 1} onClick={() => setParams({ page: page - 1 > 1 ? page - 1 : null })}>‹</button>
-          <button className="icon-button" title="Next" disabled={start + PAGE >= total} onClick={() => setParams({ page: page + 1 })}>›</button>
+          <button className="icon-button" title="Previous" disabled={page <= 1} onClick={() => setParams({ page: page - 1 > 1 ? page - 1 : null })}><ChevronLeft size={20} /></button>
+          <button className="icon-button" title="Next" disabled={start + PAGE >= total} onClick={() => setParams({ page: page + 1 })}><ChevronRight size={20} /></button>
         </span>
       </div>
       <table className="admin-table report">
@@ -566,7 +567,7 @@ export function AttachmentsTab(props: AdminProps) {
         {oneFile && (
           <div className="filter-chip one-file">
             Copies of one file
-            <button aria-label="Show all duplicates" onClick={() => setParams({ sha256: null, page: null })}>✕</button>
+            <button aria-label="Show all duplicates" onClick={() => setParams({ sha256: null, page: null })}><X size={14} /></button>
           </div>
         )}
         {dupes && !oneFile ? (

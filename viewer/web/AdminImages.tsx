@@ -1,5 +1,6 @@
 // The admin page's Images tab: a grid of every image attachment, newest first, with the lightbox.
 import { useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { GalleryPage } from "../shared/types.ts";
 import { q as query } from "./api.ts";
 import { fullDate, size } from "./format.ts";
@@ -37,8 +38,8 @@ export function ImagesTab({ params, setParams, readOnly }: AdminProps) {
   const pager = data && (
     <span className="pager">
       {data.total ? `${num(start + 1)}–${num(Math.min(data.total, start + PAGE))} of ${num(data.total)}` : "No images match."}
-      <button className="icon-button" title="Newer" disabled={page <= 1} onClick={() => toPage(page - 1)}>‹</button>
-      <button className="icon-button" title="Older" disabled={start + PAGE >= data.total} onClick={() => toPage(page + 1)}>›</button>
+      <button className="icon-button" title="Newer" disabled={page <= 1} onClick={() => toPage(page - 1)}><ChevronLeft size={20} /></button>
+      <button className="icon-button" title="Older" disabled={start + PAGE >= data.total} onClick={() => toPage(page + 1)}><ChevronRight size={20} /></button>
     </span>
   );
   return (

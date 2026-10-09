@@ -1,5 +1,6 @@
-// The Gmail-style list of threads: checkbox · star · participants · subject — snippet · chips · 📎 · date.
+// The Gmail-style list of threads: checkbox · star · participants · subject — snippet · chips · paperclip · date.
 import { useEffect, useRef, type ReactNode } from "react";
+import { Paperclip, Star } from "lucide-react";
 import { labelColor } from "../shared/labelColors.ts";
 import { isCategory, categoryName, isUserLabel } from "../shared/labels.ts";
 import type { ThreadList as ThreadListData, ThreadSummary } from "../shared/types.ts";
@@ -23,6 +24,11 @@ function Participants({ t }: { t: ThreadSummary }) {
       {t.messageCount > 1 && <span className="count"> {t.messageCount}</span>}
     </span>
   );
+}
+
+/** The star of a row or a conversation: filled when starred. */
+export function StarIcon({ on }: { on: boolean }) {
+  return <Star size={18} fill={on ? "currentColor" : "none"} />;
 }
 
 /** A label chip; user labels show their color, system labels and categories stay gray. */
@@ -79,7 +85,7 @@ export function ThreadList(props: {
               disabled={!props.onToggleStar}
               onClick={() => props.onToggleStar?.(t)}
             >
-              {t.starred ? "★" : "☆"}
+              <StarIcon on={t.starred} />
             </button>
           </span>
           <Participants t={t} />
@@ -89,7 +95,7 @@ export function ThreadList(props: {
             {t.snippet && <span className={`snippet${props.noteSnippets ? " note-snippet" : ""}`}> — <Hl text={t.snippet} /></span>}
           </span>
           <span className="row-end">
-            {t.hasAttachments && <span className="clip" title="Has attachments">📎</span>}
+            {t.hasAttachments && <span className="clip" title="Has attachments"><Paperclip size={15} /></span>}
             {t.hasNote && (
               <span className="note-mark" title={t.noteFirstLine ? `Note: ${t.noteFirstLine}` : "Has a note"} aria-label="Has a note">
                 <NoteIcon filled size={15} />

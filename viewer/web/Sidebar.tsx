@@ -1,20 +1,21 @@
 // Left sidebar: folders, a collapsed Categories group, then user labels as a tree, each with its color.
 import { useState } from "react";
+import { Archive, ChartColumn, ChevronDown, ChevronRight, EllipsisVertical, FilePen, Inbox, MessageSquare, NotepadText, OctagonAlert, Send, Star, Tag, Trash2, type LucideIcon } from "lucide-react";
 import { labelColor } from "../shared/labelColors.ts";
 import type { Sidebar as SidebarData, SidebarItem } from "../shared/types.ts";
 import { go } from "./route.ts";
 
-const ICONS: Record<string, string> = {
-  inbox: "📥",
-  starred: "⭐",
-  important: "🏷️",
-  sent: "📤",
-  drafts: "📝",
-  chats: "💬",
-  all: "📚",
-  spam: "⚠️",
-  trash: "🗑️",
-  notes: "🗒️",
+const ICONS: Record<string, LucideIcon> = {
+  inbox: Inbox,
+  starred: Star,
+  important: Tag,
+  sent: Send,
+  drafts: FilePen,
+  chats: MessageSquare,
+  all: Archive,
+  spam: OctagonAlert,
+  trash: Trash2,
+  notes: NotepadText,
 };
 
 function load(key: string, fallback: boolean): boolean {
@@ -36,12 +37,12 @@ function save(key: string, v: boolean) {
 
 type OnOptions = (item: SidebarItem, anchor: DOMRect) => void;
 
-function Item({ item, active, label, depth = 0, icon, color, toggle, onOptions, optionsOpen }: {
+function Item({ item, active, label, depth = 0, icon: Icon, color, toggle, onOptions, optionsOpen }: {
   item: SidebarItem;
   active: boolean;
   label: string;
   depth?: number;
-  icon?: string;
+  icon?: LucideIcon;
   color?: string; // user labels: a colored square in place of the icon
   toggle?: { open: boolean; onClick: () => void };
   onOptions?: OnOptions;
@@ -51,13 +52,13 @@ function Item({ item, active, label, depth = 0, icon, color, toggle, onOptions, 
     <li className={`nav-item${active ? " active" : ""}${item.count && item.view !== "drafts" ? " has-unread" : ""}`} style={{ paddingLeft: 12 + depth * 14 }}>
       {toggle ? (
         <button className="tree-toggle" aria-label={toggle.open ? "Collapse" : "Expand"} onClick={toggle.onClick}>
-          {toggle.open ? "▾" : "▸"}
+          {toggle.open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
         </button>
       ) : (
         <span className="tree-toggle" />
       )}
       <a href="#" onClick={(e) => { e.preventDefault(); go({ view: item.view }); }} title={item.name}>
-        {icon && <span className="nav-icon" aria-hidden>{icon}</span>}
+        {Icon && <span className="nav-icon" aria-hidden><Icon size={18} /></span>}
         {color && <span className="nav-icon" aria-hidden><span className={`label-square lc-${color}`} /></span>}
         <span className="nav-name">{label}</span>
         {item.count ? <span className="nav-count">{item.count.toLocaleString()}</span> : null}
@@ -71,7 +72,7 @@ function Item({ item, active, label, depth = 0, icon, color, toggle, onOptions, 
           aria-expanded={!!optionsOpen}
           onClick={(e) => onOptions(item, e.currentTarget.getBoundingClientRect())}
         >
-          ⋮
+          <EllipsisVertical size={16} />
         </button>
       )}
     </li>
@@ -138,7 +139,7 @@ export function Sidebar({ data, view, onLabelOptions, optionsFor }: {
         <ul>
           <li className="nav-group">
             <button onClick={() => { setCatsOpen(!catsOpen); save("sidebar.categories", !catsOpen); }}>
-              {catsOpen ? "▾" : "▸"} Categories
+              {catsOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />} Categories
             </button>
           </li>
           {catsOpen && data.categories.map((c) => <Item key={c.view} item={c} label={c.name} depth={1} active={view === c.view} />)}
@@ -151,7 +152,7 @@ export function Sidebar({ data, view, onLabelOptions, optionsFor }: {
         </ul>
       )}
       <ul>
-        <Item item={{ view: "admin", name: "Archive stats", count: null }} label="Archive stats" icon="📊" active={view === "admin"} />
+        <Item item={{ view: "admin", name: "Archive stats", count: null }} label="Archive stats" icon={ChartColumn} active={view === "admin"} />
       </ul>
     </nav>
   );

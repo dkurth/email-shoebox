@@ -1,5 +1,6 @@
 // One conversation, as in Gmail: subject, then one card per message (read ones collapsed).
 import { useEffect, useMemo, useState } from "react";
+import { ChevronDown, Download, File, FileArchive, FileAudio, FileImage, FileSpreadsheet, FileText, FileVideo, Mail, Trash2, type LucideIcon } from "lucide-react";
 import { previewKind } from "../shared/preview.ts";
 import type { Address, AttachmentInfo, MessageDetail, ThreadDetail } from "../shared/types.ts";
 import { EmailBody } from "./EmailBody.tsx";
@@ -8,7 +9,7 @@ import { Lightbox } from "./Lightbox.tsx";
 import { useAttachmentActions } from "./attachmentActions.ts";
 import { Hl, useHighlight } from "./highlight.tsx";
 import { findMatches } from "../shared/search.ts";
-import { Chip } from "./ThreadList.tsx";
+import { Chip, StarIcon } from "./ThreadList.tsx";
 
 function AddressList({ list, me }: { list: Address[]; me: string[] }) {
   return (
@@ -47,16 +48,21 @@ function Details({ m, me }: { m: MessageDetail; me: string[] }) {
   );
 }
 
-function fileIcon(type: string): string {
-  if (type.startsWith("image/")) return "🖼️";
-  if (type.startsWith("audio/")) return "🎵";
-  if (type.startsWith("video/")) return "🎞️";
-  if (type === "application/pdf") return "📕";
-  if (type.includes("zip") || type.includes("compressed")) return "🗜️";
-  if (type.startsWith("text/") || type.includes("word") || type.includes("document")) return "📄";
-  if (type.includes("sheet") || type.includes("excel")) return "📊";
-  if (type === "message/rfc822") return "✉️";
-  return "📎";
+function fileIcon(type: string): LucideIcon {
+  if (type.startsWith("image/")) return FileImage;
+  if (type.startsWith("audio/")) return FileAudio;
+  if (type.startsWith("video/")) return FileVideo;
+  if (type === "application/pdf") return FileText;
+  if (type.includes("zip") || type.includes("compressed")) return FileArchive;
+  if (type.startsWith("text/") || type.includes("word") || type.includes("document")) return FileText;
+  if (type.includes("sheet") || type.includes("excel")) return FileSpreadsheet;
+  if (type === "message/rfc822") return Mail;
+  return File;
+}
+
+function FileIcon({ type }: { type: string }) {
+  const Icon = fileIcon(type);
+  return <Icon className="file-icon" size={18} aria-hidden />;
 }
 
 /** The file type icon and the "no preview" fallback. */
@@ -68,7 +74,7 @@ function FileChip({ a, href, newTab }: { a: AttachmentInfo; href: string; newTab
       {...(newTab ? { target: "_blank", rel: "noopener noreferrer" } : { download: a.filename ?? "" })}
       title={`${newTab ? "Open" : "Download"} ${a.filename ?? "attachment"}`}
     >
-      <span className="file-icon" aria-hidden>{fileIcon(a.contentType)}</span>
+      <FileIcon type={a.contentType} />
       <span className="file-name">{a.filename || "(no name)"}</span>
       <span className="file-size">{size(a.size)}</span>
     </a>
@@ -80,7 +86,7 @@ function DeletedChip({ a }: { a: AttachmentInfo }) {
   const { onDeletedClick } = useAttachmentActions();
   return (
     <button className="file-chip deleted" title="This file was deleted from the archive" onClick={() => onDeletedClick(a)}>
-      <span className="file-icon" aria-hidden>{fileIcon(a.contentType)}</span>
+      <FileIcon type={a.contentType} />
       <span className="file-name">{a.filename || "(no name)"}</span>
       <span className="file-size">(deleted)</span>
     </button>
@@ -92,7 +98,7 @@ function DeleteIcon({ a }: { a: AttachmentInfo }) {
   if (!onDelete || a.deletedAt) return null;
   return (
     <button className="attachment-delete" title={`Delete ${a.filename ?? "this attachment"} from the archive`} aria-label={`Delete ${a.filename ?? "attachment"}`} onClick={() => onDelete(a)}>
-      🗑
+      <Trash2 size={16} />
     </button>
   );
 }
@@ -100,7 +106,7 @@ function DeleteIcon({ a }: { a: AttachmentInfo }) {
 function DownloadIcon({ a }: { a: AttachmentInfo }) {
   return (
     <a className="download-icon" href={`/api/attachments/${a.id}/download`} download={a.filename ?? ""} title={`Download ${a.filename ?? "attachment"}`} aria-label="Download">
-      ⬇
+      <Download size={16} />
     </a>
   );
 }
@@ -235,7 +241,7 @@ function MessageCard({ m, me, expanded, onToggle }: { m: MessageDetail; me: stri
               aria-expanded={showDetails}
               onClick={(e) => { e.stopPropagation(); setShowDetails(!showDetails); }}
             >
-              ▾
+              <ChevronDown size={16} />
             </button>
           </div>
         </div>
@@ -306,7 +312,7 @@ export function ThreadView({ thread, me, view, onToggleStar }: {
           disabled={!onToggleStar}
           onClick={onToggleStar}
         >
-          {starred ? "★" : "☆"}
+          <StarIcon on={starred} />
         </button>
         {thread.labels.map((l) => <Chip key={l} name={l} />)}
         {shown.some((m) => !expanded.has(m.id)) && (

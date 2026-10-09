@@ -1,6 +1,7 @@
 // The app shell: header, sidebar, toolbar, and either the thread list or one thread.
 // Owns routing, data loading, the list cursor and selection, and every action.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, ChartColumn, ChevronDown, ChevronLeft, ChevronRight, EllipsisVertical, Keyboard, Mail, Moon, Sun } from "lucide-react";
 import { isSearchView, isUserLabel, removeAction, searchQuery, viewLabel, viewTitle } from "../shared/labels.ts";
 import { highlightTerms, parseQuery } from "../shared/search.ts";
 import type {
@@ -477,20 +478,20 @@ export function App() {
       <div className="app">
         <header className="topbar">
           <a className="brand" href="#/inbox">
-            <span aria-hidden>✉️</span> Mail archive
+            <Mail className="brand-icon" size={24} aria-hidden /> Mail archive
           </a>
           {session && <span className="archive-path" title={session.archiveDir}>{session.archiveDir}</span>}
           {session?.readOnly && <span className="badge">read-only</span>}
           <SearchBox ref={searchInput} query={query} onSearch={search} onHelp={() => setSearchHelp(true)} />
           <span className="spacer" />
           <button className="icon-button" aria-label="Archive stats" title="Archive stats (g then z)" aria-pressed={admin} onClick={() => go({ view: "admin" })}>
-            📊
+            <ChartColumn size={20} />
           </button>
-          <button className="icon-button" aria-label="Dark mode" aria-pressed={dark} title={dark ? "Dark mode is on" : "Dark mode is off"} onClick={toggleDark}>
-            🌙
+          <button className="icon-button theme-toggle" aria-label="Dark mode" aria-pressed={dark} title={dark ? "Dark mode is on" : "Dark mode is off"} onClick={toggleDark}>
+            {dark ? <Sun size={20} /> : <Moon size={20} />}
           </button>
           <button className="icon-button" title="Keyboard shortcuts (?)" onClick={() => setHelp(true)}>
-            ⌨️
+            <Keyboard size={20} />
           </button>
         </header>
         <Sidebar
@@ -509,7 +510,7 @@ export function App() {
           <div className="toolbar">
             {route.threadId ? (
               <button className="icon-button" title="Back to list (u)" onClick={backToList}>
-                ←
+                <ArrowLeft size={20} />
               </button>
             ) : (
               <input
@@ -528,7 +529,7 @@ export function App() {
                 {remove && <button className="text-button" title={`${remove.button} (y)`} onClick={actions.remove}>{remove.button}</button>}
                 {route.view !== "trash" && <button className="text-button" title="Move to Trash (#)" onClick={actions.trash}>Move to Trash</button>}
                 {route.view === "trash" && <button className="text-button danger" title="Delete forever (#)" onClick={actions.trash}>Delete forever</button>}
-                <button className="text-button" title="Label as (l)" onClick={actions.labels}>Labels ▾</button>
+                <button className="text-button" title="Label as (l)" onClick={actions.labels}>Labels <ChevronDown size={16} /></button>
                 <button className="text-button" title="Mark as read (Shift-i)" onClick={actions.read}>Mark read</button>
                 <button className="text-button" title="Mark as unread (Shift-u)" onClick={actions.unread}>Mark unread</button>
                 <button className="text-button" title="Star (s)" onClick={actions.star}>Star</button>
@@ -537,7 +538,7 @@ export function App() {
             <span className="spacer" />
             {route.threadId && !readOnly && deletable && deletable.files.length + deletable.inText.length > 0 && (
               <button className="icon-button" aria-label="More" title="More" aria-haspopup="menu" aria-expanded={!!threadMenu} onClick={(e) => setThreadMenu(e.currentTarget.getBoundingClientRect())}>
-                ⋮
+                <EllipsisVertical size={20} />
               </button>
             )}
             {route.threadId && noteSaver && <NoteButton saver={noteSaver} open={noteOpen} onToggle={toggleNote} />}
@@ -545,10 +546,10 @@ export function App() {
               <span className="pager">
                 {list.total ? `${(pageStart + 1).toLocaleString()}–${(pageStart + threads.length).toLocaleString()} of ${list.total.toLocaleString()}` : ""}
                 <button className="icon-button" title="Newer" disabled={list.page <= 1} onClick={() => go({ view: route.view, page: list.page - 1 })}>
-                  ‹
+                  <ChevronLeft size={20} />
                 </button>
                 <button className="icon-button" title="Older" disabled={pageStart + threads.length >= list.total} onClick={() => go({ view: route.view, page: list.page + 1 })}>
-                  ›
+                  <ChevronRight size={20} />
                 </button>
               </span>
             )}

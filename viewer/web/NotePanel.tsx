@@ -1,6 +1,7 @@
 // Notes on a thread: the toolbar's note button and the panel on the right of the thread view.
 // Saving is automatic (web/noteSaver.ts); there is no Save button.
 import { useEffect, useState } from "react";
+import { NotepadText } from "lucide-react";
 import { findMatches } from "../shared/search.ts";
 import { highlightText, useHighlight } from "./highlight.tsx";
 import type { NoteInfo, NoteSaveResult, ThreadDetail } from "../shared/types.ts";
@@ -53,18 +54,7 @@ export function useNoteStatus(saver: NoteSaver | null): NoteStatus | null {
 }
 
 export function NoteIcon({ filled, size = 20 }: { filled: boolean; size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className={`note-icon${filled ? " filled" : ""}`}>
-      <path
-        d="M5 3h10l4 4v14H5z"
-        fill={filled ? "currentColor" : "none"}
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinejoin="round"
-      />
-      <path d="M8.5 11h7M8.5 14.5h7M8.5 18h4.5" stroke={filled ? "var(--panel)" : "currentColor"} strokeWidth="1.6" strokeLinecap="round" />
-    </svg>
-  );
+  return <NotepadText size={size} aria-hidden className={`note-icon${filled ? " filled" : ""}`} />;
 }
 
 export function NoteButton({ saver, open, onToggle }: { saver: NoteSaver; open: boolean; onToggle: () => void }) {

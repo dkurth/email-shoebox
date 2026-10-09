@@ -1,6 +1,7 @@
 // The admin page's People tab: who you sent to, who you received from, and mailing lists.
 // Plus the page for one person (#/admin/person?addr=…).
 import { useEffect, useState } from "react";
+import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import type { AdminList, AdminPerson, AdminPersonDetail } from "../shared/types.ts";
 import { q as query } from "./api.ts";
 import { fullDate, size } from "./format.ts";
@@ -17,8 +18,8 @@ function Pager({ page, total, onPage }: { page: number; total: number; onPage: (
   return (
     <span className="pager">
       {num(start + 1)}–{num(Math.min(total, start + PAGE))} of {num(total)}
-      <button className="icon-button" title="Previous" disabled={page <= 1} onClick={() => onPage(page - 1)}>‹</button>
-      <button className="icon-button" title="Next" disabled={start + PAGE >= total} onClick={() => onPage(page + 1)}>›</button>
+      <button className="icon-button" title="Previous" disabled={page <= 1} onClick={() => onPage(page - 1)}><ChevronLeft size={20} /></button>
+      <button className="icon-button" title="Next" disabled={start + PAGE >= total} onClick={() => onPage(page + 1)}><ChevronRight size={20} /></button>
     </span>
   );
 }
@@ -239,7 +240,7 @@ export function PersonPage({ params }: AdminProps) {
   const name = p.names[0]?.name ?? p.addr;
   return (
     <div className="person-page">
-      <a href="#/admin/people" className="back-link">← People</a>
+      <a href="#/admin/people" className="back-link"><ArrowLeft size={14} /> People</a>
       <h1>{name}</h1>
       <div className="muted">{p.addr}</div>
       {p.names.length > 1 && <div className="muted-small">Also written as: {p.names.slice(1).map((n) => n.name).join(", ")}</div>}

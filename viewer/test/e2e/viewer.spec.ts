@@ -386,7 +386,7 @@ test("search: highlights inside HTML email, and offers matches in Trash", async 
   await expect(subjects(page)).toHaveText(["Old coupon"]);
 });
 
-test("search: the ⓘ button shows the search options", async ({ page }) => {
+test("search: the info button shows the search options", async ({ page }) => {
   server = await startServer();
   await page.goto(server.url);
   await page.getByRole("button", { name: "Search options" }).click();
@@ -435,9 +435,10 @@ test("admin People: tables, group by domain, a person's page, a mailing list", a
   await page.goto(server.url + "#/admin/people");
   await expect(page.getByRole("tab", { name: "People I sent to" })).toHaveAttribute("aria-selected", "true"); // the first time
   const sentHeaders = page.locator(".people-table thead th");
-  await expect(sentHeaders).toHaveText(["Address", "Name", "Total ▾", "To", "Cc", "Bcc", "Last"]);
+  await expect(sentHeaders).toHaveText(["Address", "Name", "Total", "To", "Cc", "Bcc", "Last"]);
+  await expect(sentHeaders.nth(2)).toHaveAttribute("aria-sort", "descending");
   await page.getByRole("button", { name: "To", exact: true }).click(); // sort by To
-  await expect(sentHeaders.nth(3)).toHaveText("To ▾");
+  await expect(sentHeaders.nth(3)).toHaveAttribute("aria-sort", "descending");
   await page.getByRole("tab", { name: "People I received from" }).click();
   await expect(page).toHaveURL(/dir=received/);
   await expect(page.locator(".people-table")).toHaveCount(1); // one table at a time, full width

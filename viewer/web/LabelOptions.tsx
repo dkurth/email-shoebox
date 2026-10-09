@@ -1,5 +1,6 @@
 // The ⋮ menu of a sidebar label: pick its color, go back to the default color, or delete it.
 import { createContext, useContext, useEffect, useRef } from "react";
+import { Check } from "lucide-react";
 import { LABEL_COLORS, labelColor, type ChosenColors } from "../shared/labelColors.ts";
 import type { SidebarItem } from "../shared/types.ts";
 
@@ -53,7 +54,7 @@ export function LabelOptions(props: {
               aria-pressed={c.id === current}
               onClick={() => props.onColor(c.id)}
             >
-              {c.id === current ? "✓" : ""}
+              {c.id === current && <Check size={16} strokeWidth={3} />}
             </button>
           ))}
         </div>

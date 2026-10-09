@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { X } from "lucide-react";
 
 export interface ToastData {
   id: number;
@@ -20,7 +21,7 @@ export function Toast({ toast, onClose }: { toast: ToastData; onClose: () => voi
         </button>
       )}
       <button className="toast-close" aria-label="Close" onClick={onClose}>
-        ✕
+        <X size={16} />
       </button>
     </div>
   );

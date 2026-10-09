@@ -4,8 +4,12 @@
   "description": "A Gmail-like viewer for archives made by gmail2sqlite. Runs locally.",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=24" },
-  "bin": { "gmail-viewer": "scripts/start.ts" },
+  "engines": {
+    "node": ">=24"
+  },
+  "bin": {
+    "gmail-viewer": "scripts/start.ts"
+  },
   "scripts": {
     "start": "node scripts/start.ts",
     "dev": "node scripts/dev.ts",
@@ -27,6 +31,7 @@
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.2",
     "dompurify": "3.4.16",
+    "lucide-react": "1.48.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "typescript": "7.0.2",

@@ -1,5 +1,6 @@
 // Full-screen image viewer: ←/→ move between items, Esc or a click on the backdrop closes it.
 import { useEffect, type ReactNode } from "react";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { size } from "./format.ts";
 
 export interface LightboxItem {
@@ -49,15 +50,15 @@ export function Lightbox({ items, index, onIndex, onClose, actions }: {
         <span className="spacer" />
         {actions?.(item)}
         <a className="text-button" href={`/api/attachments/${item.id}/download`} download={item.name}>Download</a>
-        <button className="icon-button" aria-label="Close" title="Close (Esc)" onClick={onClose}>✕</button>
+        <button className="icon-button" aria-label="Close" title="Close (Esc)" onClick={onClose}><X size={20} /></button>
       </div>
       <div className="lightbox-stage">
         {items.length > 1 && (
-          <button className="lightbox-nav prev" aria-label="Previous image" onClick={(e) => { e.stopPropagation(); go(-1); }}>‹</button>
+          <button className="lightbox-nav prev" aria-label="Previous image" onClick={(e) => { e.stopPropagation(); go(-1); }}><ChevronLeft size={32} /></button>
         )}
         <img key={item.id} src={`/api/attachments/${item.id}/inline`} alt={item.name} onClick={(e) => e.stopPropagation()} />
         {items.length > 1 && (
-          <button className="lightbox-nav next" aria-label="Next image" onClick={(e) => { e.stopPropagation(); go(1); }}>›</button>
+          <button className="lightbox-nav next" aria-label="Next image" onClick={(e) => { e.stopPropagation(); go(1); }}><ChevronRight size={32} /></button>
         )}
       </div>
       {item.details && <div className="lightbox-details" onClick={(e) => e.stopPropagation()}>{item.details}</div>}
