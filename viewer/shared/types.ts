@@ -204,3 +204,27 @@ export interface AdminPersonDetail {
   labels: { name: string; n: number }[]; // user labels on their mail, top 10
   attachments: { id: number; filename: string | null; size: number; contentType: string | null; threadId: string; date: number | null; subject: string | null }[];
 }
+
+export interface AttachmentSummary {
+  count: number;
+  bytes: number;
+  groups: { group: string; count: number; bytes: number; types: { type: string; count: number; bytes: number }[] }[];
+  senders: { addr: string; name: string; count: number; bytes: number }[]; // top 20 by size
+}
+
+export interface AttachmentRow {
+  id: number;
+  filename: string | null;
+  size: number;
+  contentType: string | null;
+  typeGroup: string;
+  deletedAt: number | null;
+  isInline: boolean;
+  sha256: string;
+  messageId: number;
+  threadId: string;
+  date: number | null;
+  fromAddr: string | null;
+  fromName: string | null;
+  subject: string | null;
+}

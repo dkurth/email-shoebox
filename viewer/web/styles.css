@@ -279,7 +279,7 @@ mark.hl { background: #fde293; color: inherit; border-radius: 2px; }
 .admin-table { border-collapse: collapse; width: 100%; font-size: 13px; }
 .admin-table th { text-align: left; font-weight: 500; color: var(--muted); border-bottom: 1px solid var(--line); padding: 6px 10px 6px 0; white-space: nowrap; }
 .admin-table td { border-bottom: 1px solid var(--line); padding: 6px 10px 6px 0; vertical-align: top; }
-.admin-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.admin-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .admin-table tr.warn-row td { color: var(--danger); }
 .admin-table .mono { font: 12px ui-monospace, monospace; white-space: pre-wrap; }
 .sort-button { border: 0; background: none; padding: 0; cursor: pointer; color: inherit; font: inherit; }
@@ -298,3 +298,19 @@ mark.hl { background: #fde293; color: inherit; border-radius: 2px; }
 .person-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 0 32px; }
 .back-link { font-size: 13px; }
 @media (max-width: 800px) { .people-grid { grid-template-columns: 1fr; } }
+.summary-total { display: flex; align-items: baseline; gap: 24px; flex-wrap: wrap; }
+.summary-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 0 32px; }
+.admin-table .sub-row td { color: var(--muted); font-size: 12px; padding-left: 20px; }
+.admin-table .sub-row td.mono { padding-left: 24px; }
+.report-filters { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; font-size: 13px; margin-bottom: 8px; }
+.report-filters select, .min-input { font: inherit; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); }
+.min-input { width: 64px; }
+.filter-chip { display: inline-flex; gap: 6px; align-items: center; background: var(--active); border-radius: 12px; padding: 2px 4px 2px 10px; }
+.filter-chip button { border: 0; background: none; cursor: pointer; color: inherit; }
+.report-bar { display: flex; align-items: center; gap: 12px; min-height: 36px; }
+.report-bar .pager { margin-left: auto; }
+.admin-table.report .file-cell, .admin-table.report .subject-cell { max-width: 280px; overflow-wrap: anywhere; }
+.admin-table tr.deleted-row td { color: var(--muted); }
+.deleted-mark { color: var(--muted); font-style: italic; }
+.report-player { display: block; max-width: 280px; margin-top: 4px; }
+.admin-table .check { width: 28px; }

@@ -454,3 +454,24 @@ test("admin People: tables, group by domain, a person's page, a mailing list", a
   await page.locator("section", { hasText: "Mailing lists" }).locator("a", { hasText: "Hike Club Announcements" }).click();
   await expect(subjects(page)).toHaveText(["Trail report", "Saturday hike"]);
 });
+
+test("admin Attachments: summary, biggest first, filters, preview, open email", async ({ page }) => {
+  server = await startServer();
+  await page.goto(server.url + "#/admin/attachments");
+  await expect(page.locator(".summary-total")).toContainText("14 attachments");
+  const rows = page.locator(".admin-table.report tbody tr");
+  await expect(rows.first()).toContainText("voice-memo.mp3");
+  await page.locator(".attachment-summary a", { hasText: "Images" }).click();
+  await expect(page).toHaveURL(/type=Images/);
+  await expect(rows).toHaveCount(6);
+  await rows.filter({ hasText: "beach.png" }).getByRole("button", { name: "Preview" }).click();
+  await expect(page.locator(".lightbox-name")).toHaveText("beach.png");
+  await expect(page.locator(".lightbox-details")).toContainText("Holiday media");
+  await page.keyboard.press("Escape");
+  await page.getByLabel("Larger than (MB)").fill("0.0002");
+  await page.getByLabel("Larger than (MB)").press("Enter");
+  await expect(page).toHaveURL(/min=210/);
+  await expect(rows).toHaveCount(2); // sunset.jpg twice (242 B)
+  await rows.first().getByRole("link", { name: "Open email" }).click();
+  await expect(page.locator(".thread-title h1")).toHaveText(/Holiday media/);
+});

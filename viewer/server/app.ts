@@ -13,6 +13,8 @@ import { searchThreads } from "./search.ts";
 import { isSearchView, searchQuery } from "../shared/labels.ts";
 import { NoteConflict, NotFound, saveNote } from "./notes.ts";
 import { imports, labels as adminLabels, lists, overview, people, person } from "./admin.ts";
+import { report, summary as attachmentSummary, type ReportQuery } from "./attachmentReport.ts";
+import { TYPE_GROUPS } from "../shared/fileTypes.ts";
 import { collectNotes, exportFilename, toCsv, toMarkdown } from "./exportNotes.ts";
 
 export class BadRequest extends Error {}
@@ -117,6 +119,25 @@ export function createApp(opts: AppOptions): Hono {
     if (sort && !["messages", "unread", "first", "last", "bytes", "name"].includes(sort)) throw new BadRequest(`bad sort: ${sort}`);
     return c.json(lists(db, { q: c.req.query("q"), sort, desc: c.req.query("desc") !== "0", page: intParam(c.req.query("page"), 1) }));
   });
+  app.get("/api/admin/attachments/summary", (c) => c.json(attachmentSummary(db, flag(c.req.query("inline")))));
+  const reportQuery = (get: (k: string) => string | undefined): Omit<ReportQuery, "page"> => {
+    const sort = get("sort");
+    if (sort && !["size", "date", "name", "sender"].includes(sort)) throw new BadRequest(`bad sort: ${sort}`);
+    const type = get("type") || undefined;
+    if (type && !(TYPE_GROUPS as readonly string[]).includes(type)) throw new BadRequest(`unknown type: ${type}`);
+    const min = get("min");
+    if (min && !/^\d+$/.test(min)) throw new BadRequest("min must be a number of bytes");
+    return {
+      sort: sort as ReportQuery["sort"],
+      desc: get("desc") !== "0",
+      type,
+      from: get("from") || undefined,
+      min: min ? Number(min) : undefined,
+      deleted: flag(get("deleted")),
+      inline: flag(get("inline")),
+    };
+  };
+  app.get("/api/admin/attachments", (c) => c.json(report(db, { ...reportQuery((k) => c.req.query(k)), page: intParam(c.req.query("page"), 1) })));
   app.get("/api/admin/person", (c) => {
     const addr = c.req.query("addr");
     if (!addr) throw new BadRequest("addr is required");

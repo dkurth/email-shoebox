@@ -116,3 +116,49 @@ describe("admin people", () => {
     expect(p.attachments).toHaveLength(8);
   });
 });
+
+describe("attachment report", () => {
+  type Report = { rows: import("../shared/types.ts").AttachmentRow[]; total: number };
+  const rep = async (ctx: ReturnType<typeof setup>, qs = "") => (await ctx.get(`/api/admin/attachments${qs}`)).body as Report;
+
+  it("sums by type group and by sender", async () => {
+    const ctx = setup();
+    const s = (await ctx.get("/api/admin/attachments/summary")).body as import("../shared/types.ts").AttachmentSummary;
+    expect(s.count).toBe(14); // without the inline logo
+    const groups = Object.fromEntries(s.groups.map((g) => [g.group, g.count]));
+    expect(groups).toEqual({ Images: 6, Audio: 1, Video: 1, PDF: 2, Documents: 3, Spreadsheets: 1 });
+    expect(s.groups.find((g) => g.group === "Images")!.types.map((t) => t.type).sort()).toEqual(["application/octet-stream", "image/jpeg", "image/png", "image/svg+xml"]);
+    expect(s.senders[0]).toMatchObject({ addr: "carol@example.com", count: 8 });
+    const withInline = (await ctx.get("/api/admin/attachments/summary?inline=1")).body as import("../shared/types.ts").AttachmentSummary;
+    expect(withInline.count).toBe(15);
+  });
+
+  it("lists every attachment, biggest first, with its email", async () => {
+    const ctx = setup();
+    const r = await rep(ctx);
+    expect(r.total).toBe(14);
+    expect(r.rows[0]).toMatchObject({ filename: "voice-memo.mp3", typeGroup: "Audio", fromAddr: "carol@example.com", subject: "Holiday media" });
+    expect(r.rows.map((x) => x.size)).toEqual([...r.rows.map((x) => x.size)].sort((a, b) => b - a));
+  });
+
+  it("filters and sorts", async () => {
+    const ctx = setup();
+    expect((await rep(ctx, "?type=Images")).rows.map((x) => x.filename).sort()).toEqual(["beach.png", "coupon.png", "drawing.svg", "photo.png", "sunset.jpg", "sunset.jpg"]);
+    expect((await rep(ctx, "?from=alice@example.com")).rows.map((x) => x.filename).sort()).toEqual(["itinerary.pdf", "notes.txt", "notes.txt", "report.xlsx"]);
+    expect((await rep(ctx, "?min=1000")).rows.map((x) => x.filename)).toEqual(["voice-memo.mp3", "clip.mp4"]);
+    expect((await rep(ctx, "?sort=name&desc=0")).rows[0].filename).toBe("beach.png");
+    expect((await rep(ctx, "?sort=date&desc=0")).rows[0].subject).toBe("Holiday media");
+    expect((await rep(ctx, "?inline=1")).total).toBe(15);
+    expect((await ctx.get("/api/admin/attachments?type=Nope")).status).toBe(400);
+    expect((await ctx.get("/api/admin/attachments?min=abc")).status).toBe(400);
+  });
+
+  it("hides deleted attachments unless asked", async () => {
+    const ctx = setup();
+    ctx.db.prepare("UPDATE attachments SET deleted_at = 1 WHERE filename = 'clip.mp4'").run();
+    expect((await rep(ctx)).total).toBe(13);
+    const all = await rep(ctx, "?deleted=1");
+    expect(all.total).toBe(14);
+    expect(all.rows.find((x) => x.filename === "clip.mp4")!.deletedAt).toBe(1);
+  });
+});
