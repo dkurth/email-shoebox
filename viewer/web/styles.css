@@ -334,3 +334,8 @@ mark.hl { background: #fde293; color: inherit; border-radius: 2px; }
 .dupe-banner { background: var(--hover); border-radius: 8px; padding: 10px 14px; margin: 8px 0; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
 .copy-row td { color: var(--text); }
 .one-file { margin: 8px 0; }
+.job-progress { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; }
+.job-progress progress { width: 160px; }
+.job-result { font-size: 13px; }
+.job-result details { display: inline-block; margin-left: 8px; }
+.error-text { color: var(--danger); font-size: 13px; }

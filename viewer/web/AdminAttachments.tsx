@@ -1,9 +1,9 @@
 // The admin page's Attachments tab: totals by type and sender, then every attachment, biggest first.
 // The filters live in the URL (#/admin/attachments?type=Video&min=10485760), so Back works.
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { TYPE_GROUPS } from "../shared/fileTypes.ts";
 import { previewKind } from "../shared/preview.ts";
-import type { AttachmentRow, AttachmentSummary, DupeGroup } from "../shared/types.ts";
+import type { AttachmentRow, AttachmentSummary, DedupeProgress, DupeGroup, JobState } from "../shared/types.ts";
 import { get, post, q as query } from "./api.ts";
 import { ConfirmDialog, type ConfirmData } from "./ConfirmDialog.tsx";
 import { fullDate, size } from "./format.ts";
@@ -562,7 +562,7 @@ export function AttachmentsTab(props: AdminProps) {
       <section>
         <h2>All attachments</h2>
         <Filters {...props} />
-        {dupes && <DupeBanner version={version} />}
+        {dupes && <DupeBanner version={version} readOnly={readOnly} onMerged={() => setVersion((v) => v + 1)} />}
         {oneFile && (
           <div className="filter-chip one-file">
             Copies of one file
@@ -584,15 +584,105 @@ export function AttachmentsTab(props: AdminProps) {
   );
 }
 
-/** "2,847 files are stored more than once…" (the Merge button joins this in the next part). */
-function DupeBanner({ version }: { version: number }) {
-  const { data } = useAdminData<{ groups: number; extraCopies: number; extraBytes: number }>("/api/admin/attachments/dupes-summary" + query({ v: version }));
+/** "2,847 files are stored more than once…", and the Merge duplicate files button. */
+function DupeBanner({ version, readOnly, onMerged }: { version: number; readOnly: boolean; onMerged: () => void }) {
+  const { data, reload } = useAdminData<{ groups: number; extraCopies: number; extraBytes: number }>("/api/admin/attachments/dupes-summary" + query({ v: version }));
+  const [confirm, setConfirm] = useState(false);
+  const job = useJob<DedupeProgress>("/api/admin/dedupe", () => {
+    reload();
+    onMerged();
+  });
   if (!data) return null;
+  const p = job.state?.progress;
   return (
     <div className="dupe-banner">
-      {data.groups
-        ? `${num(data.groups)} ${data.groups === 1 ? "file is" : "files are"} stored more than once: ${num(data.extraCopies)} extra ${data.extraCopies === 1 ? "copy uses" : "copies use"} ${size(data.extraBytes)}.`
-        : "No file is stored more than once."}
+      <span>
+        {data.groups
+          ? `${num(data.groups)} ${data.groups === 1 ? "file is" : "files are"} stored more than once: ${num(data.extraCopies)} extra ${data.extraCopies === 1 ? "copy uses" : "copies use"} ${size(data.extraBytes)}.`
+          : "No file is stored more than once."}
+      </span>
+      {!readOnly && data.groups > 0 && !job.state?.running && (
+        <button className="text-button" onClick={() => setConfirm(true)}>Merge duplicate files</button>
+      )}
+      {job.state?.running && p && (
+        <span className="job-progress">
+          <progress max={p.groupsTotal || 1} value={p.groupsDone} /> Merging… {num(p.groupsDone)} of {num(p.groupsTotal)} files, {size(p.bytesFreed)} freed
+        </span>
+      )}
+      {job.state?.running && !p && <span className="job-progress">Starting…</span>}
+      {!job.state?.running && job.state?.finishedAt && p && (
+        <span className="job-result">
+          Done: {size(p.bytesFreed)} freed.
+          {p.skipped.length > 0 && (
+            <details>
+              <summary>{num(p.skipped.length)} skipped</summary>
+              <ul className="confirm-list">{p.skipped.slice(0, 200).map((x, i) => <li key={i}>{x}</li>)}</ul>
+            </details>
+          )}
+        </span>
+      )}
+      {job.state?.error && <span className="error-text">{job.state.error}</span>}
+      {confirm && (
+        <ConfirmDialog
+          data={{
+            title: "Merge duplicate files?",
+            body: (
+              <>
+                <p>
+                  {num(data.extraCopies)} extra copies of {num(data.groups)} files will each become a hard link to one copy. Every email keeps its
+                  attachment, and about {size(data.extraBytes)} of disk space is freed.
+                </p>
+                <p>
+                  If you copy the archive folder to another disk, use a tool that keeps hard links, such as <code>rsync -aH</code>. Other tools may
+                  store each copy in full again.
+                </p>
+              </>
+            ),
+            confirmText: "Merge duplicate files",
+            onConfirm: () => {
+              setConfirm(false);
+              job.start();
+            },
+          }}
+          onCancel={() => setConfirm(false)}
+        />
+      )}
     </div>
   );
+}
+
+/** A maintenance job on the server: start it, then check its progress every 2 s until it ends. */
+export function useJob<P>(url: string, onDone: () => void) {
+  const [state, setState] = useState<(Omit<JobState, "progress"> & { progress: P | null }) | null>(null);
+  useEffect(() => {
+    let stop = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        const s = await get<Omit<JobState, "progress"> & { progress: P | null }>(url);
+        if (stop) return;
+        setState((old) => {
+          if (old?.running && !s.running) onDone();
+          return s;
+        });
+        if (s.running) timer = setTimeout(poll, 2000);
+      } catch {
+        /* the next start or reload tries again */
+      }
+    };
+    if (state === null || state.running) void poll();
+    return () => {
+      stop = true;
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [url, state?.running]);
+  const start = async () => {
+    try {
+      setState(await post(url, {}));
+    } catch (e) {
+      setState({ running: false, startedAt: null, finishedAt: null, progress: null, error: (e as Error).message });
+    }
+  };
+  return { state, start };
 }

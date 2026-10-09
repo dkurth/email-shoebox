@@ -583,3 +583,15 @@ test("duplicates: the badge, Duplicates only, Show copies, Delete all copies", a
   await expect(page.locator(".info-banner")).toContainText("2 attachments deleted");
   await expect(page.locator(".dupe-banner")).toContainText("1 file is stored more than once");
 });
+
+test("duplicates: Merge duplicate files shows progress and the space freed", async ({ page }) => {
+  server = await startServer();
+  await page.goto(server.url + "#/admin/attachments?dupes=1");
+  await page.getByRole("button", { name: "Merge duplicate files" }).click();
+  const dialog = page.getByRole("alertdialog");
+  await expect(dialog).toContainText("rsync -aH");
+  await dialog.getByRole("button", { name: "Merge duplicate files" }).click();
+  await expect(page.locator(".job-result")).toContainText("Done: 382 B freed.");
+  // The files stay listed as duplicates (each email still has its attachment).
+  await expect(page.locator(".dupe-banner")).toContainText("2 files are stored more than once");
+});

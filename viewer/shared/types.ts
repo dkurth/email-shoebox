@@ -239,3 +239,21 @@ export interface DupeGroup {
   copies: number;
   extraBytes: number; // the space the extra copies use
 }
+
+/** A maintenance job (Merge duplicate files, Compact database). Times are milliseconds. */
+export interface JobState {
+  running: boolean;
+  startedAt: number | null;
+  finishedAt: number | null;
+  progress: unknown; // job-specific
+  error: string | null;
+}
+
+/** Progress of "Merge duplicate files". */
+export interface DedupeProgress {
+  groupsDone: number;
+  groupsTotal: number;
+  filesLinked: number;
+  bytesFreed: number;
+  skipped: string[]; // why a file or a copy was left alone
+}
