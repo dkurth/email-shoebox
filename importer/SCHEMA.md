@@ -50,7 +50,8 @@ All paths stored in the database are relative to this folder and use `/`.
 | `list_name` | TEXT | from `List-Id`: the decoded text before `<>`, without quotes, e.g. `Example Announcements`. `NULL` if none |
 
 Indexes: `(thread_id, received_utc, date_utc)`, `received_utc`, `date_utc`, `from_addr`, `message_id`,
-`size_bytes`, and `list_id` (partial: only rows that have one).
+`size_bytes`, `list_id` (partial: only rows that have one), and a partial index of the rows
+with a `parse_error`, so counting them doesn't read every message.
 
 **Performance note for readers:** rows hold full bodies, so scanning `messages` reads
 the whole database. Filter through indexes (`message_labels(label_id, message_id)`,

@@ -83,6 +83,7 @@ CREATE INDEX IF NOT EXISTS messages_from     ON messages(from_addr);
 CREATE INDEX IF NOT EXISTS messages_msgid    ON messages(message_id);
 CREATE INDEX IF NOT EXISTS messages_size     ON messages(size_bytes);
 CREATE INDEX IF NOT EXISTS messages_list     ON messages(list_id) WHERE list_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS messages_parse_error ON messages(id) WHERE parse_error IS NOT NULL;
 
 -- One row per address on a message, so readers can find "mail to/from X" without reading
 -- the JSON columns of every message. Derived from from_*/to_json/cc_json/bcc_json.
