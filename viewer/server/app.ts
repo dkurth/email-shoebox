@@ -2,8 +2,13 @@
 import { Hono } from "hono";
 import fs from "node:fs";
 import path from "node:path";
+import { viewLabel, type View } from "../shared/labels.ts";
+import { serveAttachment } from "./attachments.ts";
 import type { Archive } from "./db.ts";
 import { guard } from "./security.ts";
+import { listThreads, original, sidebar, threadDetail } from "./views.ts";
+
+export class BadRequest extends Error {}
 
 export interface AppOptions {
   archive: Archive;
@@ -29,6 +34,7 @@ export function createApp(opts: AppOptions): Hono {
   const app = new Hono();
 
   app.onError((err, c) => {
+    if (err instanceof BadRequest || err.message.startsWith("unknown view")) return c.json({ error: err.message }, 400);
     console.error(err);
     return c.json({ error: err.message }, 500);
   });
@@ -39,6 +45,37 @@ export function createApp(opts: AppOptions): Hono {
     const version = archive.db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").pluck().get();
     return c.json({ me: opts.me, schemaVersion: Number(version), readOnly: archive.readOnly, archiveDir: archive.dir });
   });
+
+  const db = archive.db;
+  const viewParam = (raw: string | undefined): View => {
+    const view = raw ?? "inbox";
+    viewLabel(view); // throws on unknown views
+    return view;
+  };
+  const intParam = (raw: string | undefined, fallback?: number): number => {
+    const n = raw === undefined && fallback !== undefined ? fallback : Number(raw);
+    if (!Number.isInteger(n) || n < 1) throw new BadRequest(`bad number: ${raw}`);
+    return n;
+  };
+
+  app.get("/api/sidebar", (c) => c.json(sidebar(db)));
+
+  app.get("/api/threads", (c) => {
+    return c.json(listThreads(db, viewParam(c.req.query("view")), intParam(c.req.query("page"), 1), opts.me));
+  });
+
+  app.get("/api/threads/:threadId", (c) => {
+    const t = threadDetail(db, c.req.param("threadId"), viewParam(c.req.query("view")));
+    return t ? c.json(t) : c.json({ error: "No such thread" }, 404);
+  });
+
+  app.get("/api/messages/:id/original", (c) => {
+    const text = original(db, intParam(c.req.param("id")));
+    return text === null ? c.json({ error: "No such message" }, 404) : c.text(text, 200, { "X-Content-Type-Options": "nosniff" });
+  });
+
+  app.get("/api/attachments/:id/download", (c) => serveAttachment(c, archive, intParam(c.req.param("id")), "download"));
+  app.get("/api/attachments/:id/inline", (c) => serveAttachment(c, archive, intParam(c.req.param("id")), "inline"));
 
   app.all("/api/*", (c) => c.json({ error: "Not found" }, 404));
 

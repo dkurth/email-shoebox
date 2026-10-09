@@ -37,6 +37,10 @@ export function openArchive(dir: string, opts: { readOnly?: boolean } = {}): Arc
       `${file} has schema version ${row?.value ?? "unknown"}; this viewer supports ${SUPPORTED_SCHEMA_VERSIONS.join(", ")}. ${hint}`,
     );
   }
+  const indexed = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'messages_thread_date'").get();
+  if (!indexed) {
+    console.warn("note: this archive lacks an index that makes All Mail fast. Run `gmail2sqlite import` (0.2.1 or later) on it again to add it.");
+  }
   return { db, dir: abs, readOnly };
 }
 
