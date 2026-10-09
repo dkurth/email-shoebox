@@ -4,9 +4,10 @@ A Gmail-like web viewer for a mail archive made by
 [gmail2sqlite](../gmail2sqlite). It runs on your computer only: one command
 starts a small local server and opens the Inbox in a browser tab.
 
-You can read mail and change labels: archive, trash, star, add or remove
-labels, mark read or unread, and permanently empty the Trash. There is no
-compose, reply or send.
+You can read and search mail, change labels (archive, trash, star, add or
+remove labels, mark read or unread), write notes on conversations, see
+statistics about the archive, delete attachments you don't need, and
+permanently empty the Trash. There is no compose, reply or send.
 
 ## Requirements
 
@@ -53,8 +54,47 @@ Options (after `--`):
 - **Conversation:** every message, oldest first. Read messages are collapsed,
   and unread ones plus the last one are expanded. Each message shows its sender
   and recipients; ▾ shows From/To/Cc/Bcc/Date. "Show original" shows the
-  headers and decoded parts. **Click an attachment to download it.**
+  headers and decoded parts.
+- **Attachments:** images show as thumbnails; click one for a full-screen
+  viewer (←/→ between the message's images, Esc closes). Audio and video play
+  in the page. PDFs and text files open in a new tab. Anything else downloads
+  when you click it. SVG and HTML attachments are never shown in the browser.
 - **Opening a conversation marks it read.**
+- **Notes:** the note button at the right of the toolbar opens a panel where
+  you can write a plain-text note about the conversation. **It saves itself**:
+  1 second after you stop typing, at once when you leave the conversation,
+  and when you close or reload the page. If another window changed the same
+  note, you choose "Keep mine" or "Use theirs". A conversation with a note shows
+  a note icon in the list, and the **Notes** folder (under Trash) lists every
+  conversation with a note, newest note first. Notes are stored in `mail.db`
+  (`thread_notes`), and imports never change them. Export them all from the
+  admin page (Markdown or CSV).
+- **Search:** the box at the top (or `/`) takes Gmail's search syntax:
+  `from:`, `to:`, `subject:`, `label:`, `in:`, `is:unread`, `has:attachment`,
+  `filename:`, `before:`/`after:`, `larger:`, `list:`, quoted phrases, `-` to
+  leave out, `OR`, and more. Plain words also match your notes; `note:` searches
+  only notes; `word*` finds words that start with `word`. Click **ⓘ** in the
+  search box for every option. Matching words are highlighted, and each row
+  shows the text around the first match. Trash and Spam are left out unless
+  you search with `in:trash`, `in:spam` or `in:anywhere`.
+- **Archive stats** (📊 at the top, or `g` then `z`):
+  - *Overview*: counts and sizes, the date range, space on disk, parse errors,
+    notes (with the export links), the top senders and every label.
+  - *People*: everyone you sent to and received from (click an address to
+    search, a name for a page about that person), grouped by domain if you
+    like, and your mailing lists.
+  - *Attachments*: sizes by type and sender, and every attachment, biggest
+    first, with filters. **Delete** one, the ones you check, or everything the
+    filter matches. "Duplicates only" shows files stored more than once;
+    **Merge duplicate files** turns the extra copies into hard links, which
+    frees their space and keeps every attachment (see below).
+  - *Images*: every image attachment in a grid, newest first.
+  - *Imports*: every `gmail2sqlite import` run.
+  - *Maintenance*: **Compact database**.
+- **Deleting attachments:** from the attachment report, from the 🗑 on an
+  attachment in a message, or with ⋮ → "Delete all attachments in this
+  conversation". A dialog shows the names and sizes first. The file is
+  removed, the email stays, and the attachment shows as "(deleted)".
 - **Dark mode:** the 🌙 button at the top right turns dark mode on and off
   (highlighted when on). Your choice is remembered in this browser. Until you
   click it, the viewer follows your system setting.
@@ -81,7 +121,8 @@ Options (after `--`):
 | `l` | Labels menu (filter, tick labels, or create one) |
 | `Shift-i` / `Shift-u` | mark read / unread |
 | `z` | undo |
-| `g` then `i`/`s`/`t`/`a`/`d` | go to Inbox / Starred / Sent / All Mail / Drafts |
+| `g` then `i`/`s`/`t`/`a`/`d`/`z` | go to Inbox / Starred / Sent / All Mail / Drafts / Archive stats |
+| `/` | search |
 | `?` | show all shortcuts |
 
 Actions apply to the selected conversations, or to the one under the cursor
@@ -89,18 +130,35 @@ if none are selected, or to the open conversation.
 
 **`y` depends on the view, as in Gmail:** Inbox: archive. A label or category:
 remove that label. Starred: unstar. Important: mark not important. Trash: move
-to Inbox. Spam: not spam. All Mail, Sent, Drafts and Chats: nothing.
+to Inbox. Spam: not spam. Search results: archive. All Mail, Sent, Drafts,
+Chats and Notes: nothing.
 
 ### Your changes and later imports
 
 The viewer writes to `mail.db`, following the rules in gmail2sqlite's
 `SCHEMA.md`, so importing a newer Takeout export later works as expected:
 
-- Messages you **deleted forever** are not imported again.
+- Messages you **deleted forever** are not imported again. Deleting the last
+  message of a conversation also deletes its note.
 - Labels you **changed** here are kept (`gmail2sqlite import --overwrite-local-labels`
   makes the export win instead).
+- **Notes** are kept, and **deleted attachment files** are not written again.
 
 It's safe to keep a copy of the archive folder as a backup before big changes.
+
+### Disk space
+
+- **Emptying the Trash deletes the attachment files**, but `mail.db` doesn't get
+  smaller: SQLite keeps the freed space inside the file for reuse. Archive
+  stats → Maintenance → **Compact database** rewrites it without that space
+  (about 10 seconds per GB).
+- **Merge duplicate files** (Archive stats → Attachments → Duplicates only)
+  replaced 8,558 extra copies with hard links on a 126,000-message archive and
+  freed 2.3 GB, in 9 seconds. The merged copies are one file on disk; nothing
+  in the viewer changes files, but a program that edits one copy in place
+  would change all of them. **To copy the archive folder to another disk, use
+  `ditto` or `rsync -aH`**: they keep hard links. `cp -R` and `rsync -a` (no
+  `-H`) store each copy in full again. (Finder and Time Machine were not tested.)
 
 ## Safety
 
@@ -113,14 +171,17 @@ It's safe to keep a copy of the archive folder as a backup before big changes.
 - **Images from the internet are blocked** until you click "Show images in
   this message", so tracking pixels can't report that you opened old mail.
   Embedded images (`cid:`) are shown from the archive.
-- Attachment files are served only from the archive's `attachments/` folder.
+- Attachment files are served only from the archive's `attachments/` folder,
+  with `nosniff` and a policy that stops any script. Only images, audio,
+  video, PDFs and plain text are shown in the browser; text is always sent as
+  `text/plain`, so an attached web page shows as text.
 
 ## Development
 
 ```sh
 npm run dev -- ../gmail-archive   # API server (restarts on change) + Vite (hot reload) at http://localhost:5173
-npm test                          # Vitest: API, label rules, writes, Empty Trash, security
-npm run e2e                       # Playwright: keyboard flows, HTML safety, downloads (first: npx playwright install chromium)
+npm test                          # Vitest: API, label rules, writes, notes, search, admin, attachments, security
+npm run e2e                       # Playwright: keyboard flows, HTML safety, notes, search, admin pages (first: npx playwright install chromium)
 npm run typecheck
 ```
 
