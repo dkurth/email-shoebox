@@ -66,6 +66,7 @@ export interface AttachmentInfo {
   size: number;
   contentId: string | null;
   isInline: boolean;
+  deletedAt: number | null; // the file was deleted from the archive; the email stays
 }
 
 export interface MessageDetail {

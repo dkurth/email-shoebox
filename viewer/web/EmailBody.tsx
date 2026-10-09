@@ -8,13 +8,21 @@ import { highlightDom, highlightText, useHighlight } from "./highlight.tsx";
 
 const REMOTE = /^(https?:)?\/\//i;
 
+// Shown in place of a deleted inline image. Made by the app, not taken from the email.
+const DELETED_IMAGE =
+  "data:image/svg+xml," +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="48"><rect width="160" height="48" rx="6" fill="#eceff1" stroke="#c4c7c5"/>' +
+      '<text x="80" y="29" font-family="Arial" font-size="12" fill="#5f6368" text-anchor="middle">image deleted</text></svg>',
+  );
+
 interface Prepared {
   html: string;
   remoteImages: number;
 }
 
 export function prepareHtml(raw: string, attachments: AttachmentInfo[], showImages: boolean): Prepared {
-  const byCid = new Map(attachments.filter((a) => a.contentId).map((a) => [a.contentId!.toLowerCase(), a.id]));
+  const byCid = new Map(attachments.filter((a) => a.contentId).map((a) => [a.contentId!.toLowerCase(), a]));
   let remoteImages = 0;
   const purify = DOMPurify(window); // a private instance, so hooks do not leak between calls
   purify.addHook("afterSanitizeAttributes", (node) => {
@@ -27,8 +35,11 @@ export function prepareHtml(raw: string, attachments: AttachmentInfo[], showImag
       const v = el.getAttribute?.(attr);
       if (!v) continue;
       if (/^cid:/i.test(v)) {
-        const id = byCid.get(decodeURIComponent(v.slice(4)).replace(/^<|>$/g, "").toLowerCase());
-        if (id !== undefined) el.setAttribute(attr, `/api/attachments/${id}/inline`);
+        const a = byCid.get(decodeURIComponent(v.slice(4)).replace(/^<|>$/g, "").toLowerCase());
+        if (a?.deletedAt) {
+          el.setAttribute(attr, DELETED_IMAGE);
+          el.setAttribute("title", "This image was deleted from the archive");
+        } else if (a) el.setAttribute(attr, `/api/attachments/${a.id}/inline`);
         else el.removeAttribute(attr);
       } else if (REMOTE.test(v)) {
         remoteImages++;

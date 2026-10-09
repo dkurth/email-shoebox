@@ -314,3 +314,15 @@ mark.hl { background: #fde293; color: inherit; border-radius: 2px; }
 .deleted-mark { color: var(--muted); font-style: italic; }
 .report-player { display: block; max-width: 280px; margin-top: 4px; }
 .admin-table .check { width: 28px; }
+.file-chip.deleted { color: var(--muted); background: none; cursor: help; font: inherit; }
+.file-chip.deleted .file-icon { filter: grayscale(1); opacity: .6; }
+.attachment-delete { border: 0; background: none; cursor: pointer; color: var(--muted); border-radius: 50%; width: 30px; height: 30px; opacity: 0; }
+.attachment:hover .attachment-delete, .attachment-delete:focus-visible { opacity: 1; }
+.attachment-delete:hover { background: var(--hover); color: var(--danger); }
+.image-card { position: relative; }
+.image-card .attachment-delete { position: absolute; top: 4px; right: 4px; background: rgba(255,255,255,.85); z-index: 1; }
+.attachment-line { display: flex; align-items: center; gap: 4px; }
+@media (hover: none) { .attachment-delete { opacity: 1; } }
+.danger-link { color: var(--danger) !important; }
+.info-banner { background: var(--hover); padding: 8px 16px; border-radius: 8px; margin-bottom: 12px; cursor: pointer; }
+.confirm-list { margin: 8px 0 0; padding-left: 20px; max-height: 200px; overflow: auto; font-size: 13px; color: var(--muted); }

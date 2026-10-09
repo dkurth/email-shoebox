@@ -6,6 +6,7 @@ export interface ConfirmData {
   confirmText: string;
   danger?: boolean;
   onConfirm: () => void;
+  noCancel?: boolean; // a message with only an OK button
 }
 
 export function ConfirmDialog({ data, onCancel }: { data: ConfirmData; onCancel: () => void }) {
@@ -15,10 +16,12 @@ export function ConfirmDialog({ data, onCancel }: { data: ConfirmData; onCancel:
         <h2>{data.title}</h2>
         <div>{data.body}</div>
         <div className="dialog-buttons">
-          <button className="text-button" onClick={onCancel} autoFocus>
-            Cancel
-          </button>
-          <button className={`text-button${data.danger ? " danger filled" : ""}`} onClick={data.onConfirm}>
+          {!data.noCancel && (
+            <button className="text-button" onClick={onCancel} autoFocus>
+              Cancel
+            </button>
+          )}
+          <button className={`text-button${data.danger ? " danger filled" : ""}`} onClick={data.onConfirm} autoFocus={data.noCancel}>
             {data.confirmText}
           </button>
         </div>

@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { viewLabel, type View } from "../shared/labels.ts";
 import { contentDisposition, serveAttachment } from "./attachments.ts";
+import { deleteAttachments, deleteSummary, type DeleteTarget } from "./attachmentDelete.ts";
 import type { Archive } from "./db.ts";
 import { InputError, createLabel, deleteLabel, modifyThreads, setLabelColor, setStar, undoChanges } from "./mutations.ts";
 import { guard } from "./security.ts";
@@ -190,6 +191,14 @@ export function createApp(opts: AppOptions): Hono {
   app.put("/api/threads/:threadId/note", async (c) => {
     const body = await c.req.json();
     return c.json(saveNote(db, c.req.param("threadId"), body.body, body.expectedUpdatedAt ?? null, body.force === true));
+  });
+  // The report's filter, as sent by the page (same names as the report's URL).
+  const deleteTarget = (body: { ids?: unknown; filter?: Record<string, string> }): DeleteTarget =>
+    body.filter ? { filter: reportQuery((k) => body.filter?.[k]) } : { ids: body.ids };
+  app.post("/api/attachments/delete-summary", async (c) => c.json(deleteSummary(db, deleteTarget(await c.req.json()))));
+  app.post("/api/attachments/delete", async (c) => {
+    const body = await c.req.json();
+    return c.json(deleteAttachments(archive, { ...deleteTarget(body), confirmCount: body.confirmCount, confirmBytes: body.confirmBytes }));
   });
   app.post("/api/labels", async (c) => c.json(createLabel(db, (await c.req.json()).name)));
   app.delete("/api/labels/:id", (c) => c.json(deleteLabel(db, intParam(c.req.param("id")))));

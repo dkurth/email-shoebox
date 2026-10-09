@@ -5,6 +5,7 @@ import type { Address, AttachmentInfo, MessageDetail, ThreadDetail } from "../sh
 import { EmailBody } from "./EmailBody.tsx";
 import { displayName, fullDate, recipientsLine, relative, size } from "./format.ts";
 import { Lightbox } from "./Lightbox.tsx";
+import { useAttachmentActions } from "./attachmentActions.ts";
 import { Hl, useHighlight } from "./highlight.tsx";
 import { findMatches } from "../shared/search.ts";
 import { Chip } from "./ThreadList.tsx";
@@ -74,6 +75,28 @@ function FileChip({ a, href, newTab }: { a: AttachmentInfo; href: string; newTab
   );
 }
 
+/** A deleted attachment: gray, "(deleted)" in place of the size; a click explains. */
+function DeletedChip({ a }: { a: AttachmentInfo }) {
+  const { onDeletedClick } = useAttachmentActions();
+  return (
+    <button className="file-chip deleted" title="This file was deleted from the archive" onClick={() => onDeletedClick(a)}>
+      <span className="file-icon" aria-hidden>{fileIcon(a.contentType)}</span>
+      <span className="file-name">{a.filename || "(no name)"}</span>
+      <span className="file-size">(deleted)</span>
+    </button>
+  );
+}
+
+function DeleteIcon({ a }: { a: AttachmentInfo }) {
+  const { onDelete } = useAttachmentActions();
+  if (!onDelete || a.deletedAt) return null;
+  return (
+    <button className="attachment-delete" title={`Delete ${a.filename ?? "this attachment"} from the archive`} aria-label={`Delete ${a.filename ?? "attachment"}`} onClick={() => onDelete(a)}>
+      🗑
+    </button>
+  );
+}
+
 function DownloadIcon({ a }: { a: AttachmentInfo }) {
   return (
     <a className="download-icon" href={`/api/attachments/${a.id}/download`} download={a.filename ?? ""} title={`Download ${a.filename ?? "attachment"}`} aria-label="Download">
@@ -89,11 +112,13 @@ function ImageCard({ a, onOpen }: { a: AttachmentInfo; onOpen: () => void }) {
       <li className="attachment">
         <FileChip a={a} href={`/api/attachments/${a.id}/download`} />
         <span className="no-preview">No preview available</span>
+        <DeleteIcon a={a} />
       </li>
     );
   }
   return (
     <li className="attachment image-card">
+      <DeleteIcon a={a} />
       <button className="thumb" onClick={onOpen} title={`View ${a.filename ?? "image"}`}>
         <img src={`/api/attachments/${a.id}/inline`} alt={a.filename ?? "image"} loading="lazy" decoding="async" onError={() => setBroken(true)} />
       </button>
@@ -109,7 +134,10 @@ function MediaAttachment({ a, kind }: { a: AttachmentInfo; kind: "audio" | "vide
   const src = `/api/attachments/${a.id}/inline`;
   return (
     <li className={`attachment media ${kind}`}>
-      <FileChip a={a} href={`/api/attachments/${a.id}/download`} />
+      <span className="attachment-line">
+        <FileChip a={a} href={`/api/attachments/${a.id}/download`} />
+        <DeleteIcon a={a} />
+      </span>
       {broken ? (
         <span className="no-preview">No preview available</span>
       ) : kind === "audio" ? (
@@ -127,8 +155,8 @@ function Attachments({ m }: { m: MessageDetail }) {
   const html = m.bodyHtml?.toLowerCase() ?? "";
   const list = m.attachments.filter((a) => !(a.isInline && a.contentId && html.includes(`cid:${a.contentId.toLowerCase()}`)));
   if (!list.length) return null;
-  const images = list.filter((a) => previewKind(a.contentType, a.filename) === "image");
-  const others = list.filter((a) => previewKind(a.contentType, a.filename) !== "image");
+  const images = list.filter((a) => !a.deletedAt && previewKind(a.contentType, a.filename) === "image");
+  const others = list.filter((a) => a.deletedAt || previewKind(a.contentType, a.filename) !== "image");
   return (
     <div className="attachments">
       <div className="attachments-title">
@@ -142,6 +170,13 @@ function Attachments({ m }: { m: MessageDetail }) {
       {others.length > 0 && (
         <ul>
           {others.map((a) => {
+            if (a.deletedAt) {
+              return (
+                <li key={a.id} className="attachment">
+                  <DeletedChip a={a} />
+                </li>
+              );
+            }
             const kind = previewKind(a.contentType, a.filename);
             if (kind === "audio" || kind === "video") return <MediaAttachment key={a.id} a={a} kind={kind} />;
             if (kind === "pdf" || kind === "text") {
@@ -149,12 +184,14 @@ function Attachments({ m }: { m: MessageDetail }) {
                 <li key={a.id} className="attachment">
                   <FileChip a={a} href={`/api/attachments/${a.id}/inline`} newTab />
                   <DownloadIcon a={a} />
+                  <DeleteIcon a={a} />
                 </li>
               );
             }
             return (
               <li key={a.id} className="attachment">
                 <FileChip a={a} href={`/api/attachments/${a.id}/download`} />
+                <DeleteIcon a={a} />
               </li>
             );
           })}

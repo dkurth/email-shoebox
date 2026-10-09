@@ -7,6 +7,7 @@ import { preview } from "../shared/preview.ts";
 import type { Archive } from "./db.ts";
 
 interface AttachmentRow {
+  deleted_at: number | null;
   path: string;
   filename: string | null;
   content_type: string | null;
@@ -49,14 +50,21 @@ export function parseRange(header: string | undefined, size: number): { start: n
   return { start, end };
 }
 
+export const DELETED_MESSAGE = "The attached file was deleted from the archive, but the email thread was preserved.";
+const DELETED_PAGE = `<!doctype html><meta charset="utf-8"><title>Attachment deleted</title><body style="font:16px system-ui,sans-serif;margin:48px;color:#333"><p>${DELETED_MESSAGE}</p>`;
+
 // Even if a browser renders a file directly (e.g. an SVG), it can't run scripts.
 const SANDBOX_CSP = "default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'; sandbox";
 // Chrome's PDF viewer does not load under a sandbox CSP; PDFs get a strict policy without it.
 const PDF_CSP = "default-src 'none'; object-src 'self'; img-src 'self' data:; style-src 'unsafe-inline'";
 
 export function serveAttachment(c: Context, archive: Archive, id: number, mode: "download" | "inline") {
-  const row = archive.db.prepare("SELECT path, filename, content_type, size_bytes FROM attachments WHERE id = ?").get(id) as AttachmentRow | undefined;
+  const row = archive.db.prepare("SELECT path, filename, content_type, size_bytes, deleted_at FROM attachments WHERE id = ?").get(id) as AttachmentRow | undefined;
   if (!row) return c.json({ error: "No such attachment" }, 404);
+  if (row.deleted_at) {
+    // 410 Gone, with the same sentence the viewer shows.
+    return c.html(DELETED_PAGE, 410, { "X-Content-Type-Options": "nosniff", "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'" });
+  }
   const file = resolveAttachmentPath(archive.dir, row.path);
   if (!file) return c.json({ error: "Unsafe attachment path" }, 400);
   if (!fs.existsSync(file)) return c.json({ error: "Attachment file is missing from the archive folder" }, 404);

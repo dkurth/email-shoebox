@@ -32,6 +32,8 @@ import { SearchBox } from "./SearchBox.tsx";
 import { SearchHelp } from "./SearchHelp.tsx";
 import { HighlightContext } from "./highlight.tsx";
 import { AdminPage } from "./AdminPage.tsx";
+import { AttachmentActionsContext } from "./attachmentActions.ts";
+import type { AttachmentInfo } from "../shared/types.ts";
 import { anyTooBigToSendOnUnload, flushAllOnUnload, onNoteSaved } from "./noteSaver.ts";
 
 function loadFlag(key: string): boolean {
@@ -401,6 +403,35 @@ export function App() {
   const search = (q: string) => go({ view: `search:${q}` });
   const hiddenInTrashOrSpam = (list as { hiddenInTrashOrSpam?: number } | null)?.hiddenInTrashOrSpam ?? 0;
 
+  const DELETED_TEXT = "The attached file was deleted from the archive, but the email thread was preserved.";
+  const attachmentActions = {
+    onDeletedClick: () =>
+      setConfirm({ title: "Attachment deleted", body: <p>{DELETED_TEXT}</p>, confirmText: "OK", noCancel: true, onConfirm: () => setConfirm(null) }),
+    onDelete: readOnly
+      ? undefined
+      : (a: AttachmentInfo) =>
+          setConfirm({
+            title: "Delete attachment?",
+            body: (
+              <p>
+                Delete "{a.filename || "(no name)"}" ({size(a.size)}) from the archive? The email will be kept. <strong>This can't be undone.</strong>
+              </p>
+            ),
+            confirmText: "Delete attachment",
+            danger: true,
+            onConfirm: async () => {
+              setConfirm(null);
+              try {
+                const r = await post<{ deleted: number; fileErrors: string[] }>("/api/attachments/delete", { ids: [a.id], confirmCount: 1, confirmBytes: a.size });
+                setThreadVersion((v) => v + 1);
+                showToast(`Attachment deleted.${r.fileErrors.length ? " The file could not be removed; see the server log." : ""}`);
+              } catch (e) {
+                setError((e as Error).message);
+              }
+            },
+          }),
+  };
+
   const dialogOpen = help || labelMenu || !!confirm || !!labelOptions || searchHelp;
   const goKeys = {
     "g i": () => go({ view: "inbox" }),
@@ -466,6 +497,7 @@ export function App() {
         />
         <main className="main">
           <HighlightContext.Provider value={terms}>
+          <AttachmentActionsContext.Provider value={attachmentActions}>
           {admin ? (
             <AdminPage path={route.admin ?? ""} me={me} readOnly={readOnly} />
           ) : (
@@ -569,6 +601,7 @@ export function App() {
           )}
           </>
           )}
+          </AttachmentActionsContext.Provider>
           </HighlightContext.Provider>
         </main>
         {help && <ShortcutHelp onClose={() => setHelp(false)} />}

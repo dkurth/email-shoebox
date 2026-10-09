@@ -475,3 +475,40 @@ test("admin Attachments: summary, biggest first, filters, preview, open email", 
   await rows.first().getByRole("link", { name: "Open email" }).click();
   await expect(page.locator(".thread-title h1")).toHaveText(/Holiday media/);
 });
+
+test("deleting attachments: from a message, then from the report", async ({ page }) => {
+  server = await startServer();
+  await page.goto(server.url + "#/label/Media");
+  await page.locator(".thread-row", { hasText: "Holiday media" }).filter({ hasNotText: "Fwd" }).click();
+  const pdf = page.locator(".attachment", { hasText: "minutes.pdf" });
+  await pdf.hover();
+  await pdf.getByRole("button", { name: "Delete minutes.pdf" }).click();
+  const dialog = page.getByRole("alertdialog");
+  await expect(dialog).toContainText('Delete "minutes.pdf" (392 B) from the archive? The email will be kept.');
+  await dialog.getByRole("button", { name: "Delete attachment" }).click();
+  await expect(page.locator(".toast")).toContainText("Attachment deleted.");
+  const deleted = page.locator(".file-chip.deleted", { hasText: "minutes.pdf" });
+  await expect(deleted).toContainText("(deleted)");
+  await deleted.click();
+  await expect(page.getByRole("alertdialog")).toContainText("The attached file was deleted from the archive, but the email thread was preserved.");
+  await page.getByRole("button", { name: "OK" }).click();
+
+  await page.goto(server.url + "#/admin/attachments");
+  const rows = page.locator(".admin-table.report tbody tr");
+  await expect(rows.first()).toContainText("voice-memo.mp3");
+  await rows.first().getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Delete attachment" }).click();
+  await expect(page.locator(".info-banner")).toContainText("1 attachment deleted");
+  await expect(rows.first()).toContainText("clip.mp4");
+});
+
+test("read-only: no delete buttons", async ({ page }) => {
+  server = await startServer({ readOnly: true });
+  await page.goto(server.url + "#/label/Media");
+  await page.locator(".thread-row", { hasText: "Holiday media" }).filter({ hasNotText: "Fwd" }).click();
+  await expect(page.locator(".image-card")).toHaveCount(3);
+  await expect(page.locator(".attachment-delete")).toHaveCount(0);
+  await page.goto(server.url + "#/admin/attachments");
+  await expect(page.locator(".admin-table.report tbody tr").first()).toContainText("voice-memo.mp3");
+  await expect(page.locator(".admin-table.report").getByRole("button", { name: "Delete" })).toHaveCount(0);
+});

@@ -356,13 +356,13 @@ export function threadDetail(db: DB, threadId: string, view: View): ThreadDetail
     const chunk = ids.slice(i, i + 500);
     const arows = db
       .prepare(
-        `SELECT id, message_id, filename, content_type, size_bytes, content_id, is_inline FROM attachments
+        `SELECT id, message_id, filename, content_type, size_bytes, content_id, is_inline, deleted_at FROM attachments
          WHERE message_id IN (${placeholders(chunk.length)}) ORDER BY message_id, part_index`,
       )
-      .all(...chunk) as { id: number; message_id: number; filename: string | null; content_type: string; size_bytes: number; content_id: string | null; is_inline: number }[];
+      .all(...chunk) as { id: number; message_id: number; filename: string | null; content_type: string; size_bytes: number; content_id: string | null; is_inline: number; deleted_at: number | null }[];
     for (const a of arows) {
       if (!atts.has(a.message_id)) atts.set(a.message_id, []);
-      atts.get(a.message_id)!.push({ id: a.id, filename: a.filename, contentType: a.content_type, size: a.size_bytes, contentId: a.content_id, isInline: !!a.is_inline });
+      atts.get(a.message_id)!.push({ id: a.id, filename: a.filename, contentType: a.content_type, size: a.size_bytes, contentId: a.content_id, isInline: !!a.is_inline, deletedAt: a.deleted_at });
     }
   }
   const ctx = viewContext(view);
@@ -408,8 +408,8 @@ export function original(db: DB, messageId: number): string | null {
     | undefined;
   if (!r) return null;
   const atts = db
-    .prepare("SELECT part_index, filename, content_type, size_bytes FROM attachments WHERE message_id = ? ORDER BY part_index")
-    .all(messageId) as { part_index: number; filename: string | null; content_type: string; size_bytes: number }[];
+    .prepare("SELECT part_index, filename, content_type, size_bytes, deleted_at FROM attachments WHERE message_id = ? ORDER BY part_index")
+    .all(messageId) as { part_index: number; filename: string | null; content_type: string; size_bytes: number; deleted_at: number | null }[];
   const parts = [
     r.headers_raw ?? "",
     "",
@@ -420,7 +420,7 @@ export function original(db: DB, messageId: number): string | null {
     r.body_html ?? "(none)",
   ];
   if (atts.length) {
-    parts.push("", "----- attachments -----", ...atts.map((a) => `${a.part_index}. ${a.filename ?? "(no name)"}  ${a.content_type}  ${a.size_bytes} bytes`));
+    parts.push("", "----- attachments -----", ...atts.map((a) => `${a.part_index}. ${a.filename ?? "(no name)"}  ${a.content_type}  ${a.size_bytes} bytes${a.deleted_at ? "  (deleted)" : ""}`));
   }
   return parts.join("\n");
 }

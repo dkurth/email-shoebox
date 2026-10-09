@@ -4,7 +4,8 @@ import { useState, type ReactNode } from "react";
 import { TYPE_GROUPS } from "../shared/fileTypes.ts";
 import { previewKind } from "../shared/preview.ts";
 import type { AttachmentRow, AttachmentSummary } from "../shared/types.ts";
-import { q as query } from "./api.ts";
+import { post, q as query } from "./api.ts";
+import { ConfirmDialog, type ConfirmData } from "./ConfirmDialog.tsx";
 import { fullDate, size } from "./format.ts";
 import { Lightbox } from "./Lightbox.tsx";
 import { go } from "./route.ts";
@@ -20,8 +21,8 @@ export interface ReportExtras {
   rowEnd?: (r: AttachmentRow) => ReactNode;
 }
 
-function Summary({ inline, setParams }: { inline: boolean; setParams: AdminProps["setParams"] }) {
-  const { data: s, error } = useAdminData<AttachmentSummary>("/api/admin/attachments/summary" + query({ inline: inline ? 1 : 0 }));
+function Summary({ inline, setParams, version }: { inline: boolean; setParams: AdminProps["setParams"]; version: number }) {
+  const { data: s, error } = useAdminData<AttachmentSummary>("/api/admin/attachments/summary" + query({ inline: inline ? 1 : 0, v: version }));
   const [open, setOpen] = useState<Set<string>>(new Set());
   if (error) return <div className="error-banner">{error}</div>;
   if (!s) return <div className="loading">Loading…</div>;
@@ -229,15 +230,81 @@ export function AttachmentList(props: AdminProps & ReportExtras & { version?: nu
   );
 }
 
+/** Confirm, then delete attachment files (the emails stay). Shared by every delete button on the page. */
+export function useAttachmentDelete(onDone: () => void) {
+  const [confirm, setConfirm] = useState<ConfirmData | null>(null);
+  const [message, setMessage] = useState<{ text: string; error?: boolean } | null>(null);
+  /** target: the ids to delete, or the report filter ("all that match"). */
+  const ask = async (target: { ids: number[] } | { filter: Record<string, string> }, what?: ReactNode) => {
+    try {
+      const s = await post<{ count: number; bytes: number; names: string[] }>("/api/attachments/delete-summary", target);
+      if (!s.count) return setMessage({ text: "Nothing to delete." });
+      const files = s.count === 1 ? `"${s.names[0]}"` : `${num(s.count)} attachments`;
+      setConfirm({
+        title: s.count === 1 ? "Delete attachment?" : `Delete ${num(s.count)} attachments?`,
+        body: (
+          <>
+            <p>
+              Delete {files} ({size(s.bytes)}) from the archive? The email{s.count === 1 ? "" : "s"} will be kept. <strong>This can't be undone.</strong>
+            </p>
+            {what}
+            {s.count > 1 && (
+              <ul className="confirm-list">
+                {s.names.map((n, i) => <li key={i}>{n}</li>)}
+                {s.count > s.names.length && <li>…and {num(s.count - s.names.length)} more</li>}
+              </ul>
+            )}
+          </>
+        ),
+        confirmText: s.count === 1 ? "Delete attachment" : `Delete ${num(s.count)} attachments`,
+        danger: true,
+        onConfirm: async () => {
+          setConfirm(null);
+          try {
+            const r = await post<{ deleted: number; bytes: number; fileErrors: string[] }>("/api/attachments/delete", { ...target, confirmCount: s.count, confirmBytes: s.bytes });
+            setMessage({
+              text: `${r.deleted === 1 ? "1 attachment" : `${num(r.deleted)} attachments`} deleted (${size(r.bytes)}).${r.fileErrors.length ? " Some files could not be removed; see the server log." : ""}`,
+            });
+            onDone();
+          } catch (e) {
+            setMessage({ text: (e as Error).message, error: true });
+            onDone();
+          }
+        },
+      });
+    } catch (e) {
+      setMessage({ text: (e as Error).message, error: true });
+    }
+  };
+  const ui = (
+    <>
+      {message && (
+        <div className={message.error ? "error-banner" : "info-banner"} onClick={() => setMessage(null)}>
+          {message.text}
+        </div>
+      )}
+      {confirm && <ConfirmDialog data={confirm} onCancel={() => setConfirm(null)} />}
+    </>
+  );
+  return { ask, ui };
+}
+
 export function AttachmentsTab(props: AdminProps) {
-  const { params, setParams } = props;
+  const { params, setParams, readOnly } = props;
+  const [version, setVersion] = useState(0);
+  const del = useAttachmentDelete(() => setVersion((v) => v + 1));
   return (
     <div className="admin-attachments">
-      <Summary inline={params.get("inline") === "1"} setParams={setParams} />
+      {del.ui}
+      <Summary inline={params.get("inline") === "1"} setParams={setParams} version={version} />
       <section>
         <h2>All attachments</h2>
         <Filters {...props} />
-        <AttachmentList {...props} />
+        <AttachmentList
+          {...props}
+          version={version}
+          rowEnd={readOnly ? undefined : (r) => (r.deletedAt ? null : <button className="link-button danger-link" onClick={() => del.ask({ ids: [r.id] })}>Delete</button>)}
+        />
       </section>
     </div>
   );
