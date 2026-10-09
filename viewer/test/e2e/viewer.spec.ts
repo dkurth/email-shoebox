@@ -627,3 +627,18 @@ test("Maintenance: Compact database runs and reports the sizes", async ({ page }
   await page.getByRole("alertdialog").getByRole("button", { name: "Compact" }).click();
   await expect(page.locator(".job-result")).toContainText("Done:");
 });
+
+test("deleting an attachment leaves the open messages as they are", async ({ page }) => {
+  server = await startServer();
+  await page.goto(server.url + "#/label/Work");
+  await page.locator(".thread-row", { hasText: "Quarterly report" }).click();
+  // Two messages: the first (with the attachments) is read, so it starts collapsed. Open it.
+  await page.locator(".msg.collapsed").first().click();
+  await expect(page.locator(".msg.expanded")).toHaveCount(2);
+  const xlsx = page.locator(".attachment", { hasText: "report.xlsx" });
+  await xlsx.hover();
+  await xlsx.getByRole("button", { name: "Delete report.xlsx" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Delete attachment" }).click();
+  await expect(page.locator(".file-chip.deleted", { hasText: "report.xlsx" })).toContainText("(deleted)");
+  await expect(page.locator(".msg.expanded")).toHaveCount(2); // still open
+});

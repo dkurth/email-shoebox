@@ -281,7 +281,10 @@ export function ThreadView({ thread, me, view, onToggleStar }: {
     return s;
   }, [thread, terms]);
   const [expanded, setExpanded] = useState(initial);
-  useEffect(() => setExpanded(initial), [initial]);
+  // Reset only for another thread or another search. A reload of the same thread (after deleting
+  // an attachment, starring, changing labels) keeps the messages you opened or closed.
+  const shownKey = `${thread.threadId}\n${terms.map((t) => t.text).join("\n")}`;
+  useEffect(() => setExpanded(initial), [shownKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggle = (id: number) =>
     setExpanded((s) => {
