@@ -66,13 +66,20 @@ def _cmd_stats(args: argparse.Namespace) -> int:
     msgs, size, first, last = q("SELECT count(*), sum(size_bytes), min(coalesce(received_utc, date_utc)), max(coalesce(received_utc, date_utc)) FROM messages")
     threads = q("SELECT count(*) FROM threads")[0]
     att_n, att_size = q("SELECT count(*), sum(size_bytes) FROM attachments")
+    version = int(q("SELECT value FROM meta WHERE key = 'schema_version'")[0])
+    del_n, del_size, notes = 0, 0, 0
+    if version >= 3:  # stats opens the database read-only, so an older archive isn't upgraded here
+        del_n, del_size = q("SELECT count(*), sum(size_bytes) FROM attachments WHERE deleted_at IS NOT NULL")
+        notes = q("SELECT count(*) FROM thread_notes")[0]
     errors = q("SELECT count(*) FROM messages WHERE parse_error IS NOT NULL")[0]
     unread, starred = q("SELECT sum(is_unread), sum(is_starred) FROM messages")
     print(f"Database:     {path}")
     print(f"Messages:     {msgs:,}  ({_fmt_bytes(size)} raw)")
     print(f"Date range:   {_fmt_date(first)} to {_fmt_date(last)}")
     print(f"Threads:      {threads:,}")
-    print(f"Attachments:  {att_n:,}  ({_fmt_bytes(att_size)})")
+    deleted = f", {del_n:,} deleted ({_fmt_bytes(del_size)} freed)" if del_n else ""
+    print(f"Attachments:  {att_n:,}  ({_fmt_bytes(att_size)}){deleted}")
+    print(f"Notes:        {notes:,}")
     print(f"Unread:       {unread or 0:,}   Starred: {starred or 0:,}")
     print(f"Parse errors: {errors:,}")
     rows = conn.execute(

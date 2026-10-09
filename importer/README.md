@@ -61,8 +61,12 @@ Already-imported messages aren't re-parsed; only their labels are refreshed. So:
   messages are added and label changes (read, starred, moved) are applied. Messages
   you've since deleted from Gmail stay in the archive.
 - Changes made in a viewer are kept: messages you deleted there aren't re-imported,
-  and labels you edited there aren't overwritten (use `--overwrite-local-labels`
-  to let the export win).
+  labels you edited there aren't overwritten (use `--overwrite-local-labels`
+  to let the export win), notes stay, and attachment files you deleted there
+  aren't written again.
+- A newer version of `gmail2sqlite` upgrades an older archive the first time it
+  imports into it. The upgrade to schema version 3 reads every message once
+  (about a minute for 125,000 messages).
 
 Messages that can't be fully decoded are still stored, with whatever could be
 read, and with a note in `messages.parse_error`. `stats` shows how many there are.
@@ -90,6 +94,8 @@ Good places to start:
     `people:alice`, `subject:report`, `attachment_names:pdf`, `tax NOT spam`.
   - *Messages with a label*: e.g. `Inbox`, `Starred`, or one of your labels.
   - *A whole thread*: all messages with a given `thread_id`.
+  - *Search notes*: full-text search in notes written in a viewer.
+  - *Mailing lists*: messages per `List-Id`.
   - *Label counts*.
 - **`messages`**: the full rows, including `body_text`, `body_html` (shown as
   text) and `headers_raw`. Click a message's `id` to see one message.
@@ -111,8 +117,8 @@ sqlite3 gmail-archive/mail.db \
 
 [local-gmail-viewer](../local-gmail-viewer) is a separate project: a Gmail-like
 viewer for these archives that runs locally (`npm start -- ../gmail-archive`).
-Its label changes and deletes follow the "Rules for writers" in SCHEMA.md, so
-later imports keep them.
+Its label changes, deletes, notes and deleted attachment files follow the
+"Rules for writers" in SCHEMA.md, so later imports keep them.
 
 ## How it works
 

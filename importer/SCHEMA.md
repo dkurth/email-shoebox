@@ -1,4 +1,4 @@
-# Archive format (schema version 2)
+# Archive format (schema version 3)
 
 This is the contract between `gmail2sqlite` and anything that reads its output,
 such as the web interface. The output folder is self-contained and can be moved
@@ -46,8 +46,11 @@ All paths stored in the database are relative to this folder and use `/`.
 | `parse_error` | TEXT | `NULL` normally. Otherwise, newline-separated notes about what couldn't be decoded; the row still has everything that could be |
 | `import_id` | INTEGER | the `imports` row that first stored this message |
 | `labels_edited_at` | INTEGER | set by a viewer when it changes this message's labels; imports then keep those labels (see below) |
+| `list_id` | TEXT | from the first `List-Id` header (RFC 2919): the part inside `<>`, lower-cased, e.g. `announce.lists.example.org`. A value with no `<>` is used whole. `NULL` if there is no header |
+| `list_name` | TEXT | from `List-Id`: the decoded text before `<>`, without quotes, e.g. `Example Announcements`. `NULL` if none |
 
-Indexes: `(thread_id, received_utc, date_utc)`, `received_utc`, `date_utc`, `from_addr`, `message_id`.
+Indexes: `(thread_id, received_utc, date_utc)`, `received_utc`, `date_utc`, `from_addr`, `message_id`,
+`size_bytes`, and `list_id` (partial: only rows that have one).
 
 **Performance note for readers:** rows hold full bodies, so scanning `messages` reads
 the whole database. Filter through indexes (`message_labels(label_id, message_id)`,
@@ -73,6 +76,9 @@ On re-import, a message's label set is **replaced** with the one in the newer ex
 | `size_bytes`, `sha256` | | of the decoded file |
 | `content_id` | TEXT | `Content-ID` without `<>`; matches `cid:` URLs in `body_html` |
 | `is_inline` | INTEGER | 1 for inline parts (usually images embedded in the HTML) |
+| `deleted_at` | INTEGER | set by a viewer when it deleted the file (see rule 6). The row stays, so the name, size and type can still be shown. `NULL` = the file is in the archive |
+
+Indexes: `sha256`, `size_bytes`.
 
 Files on disk are **decoded** (not base64) and can be served directly with
 `content_type`. `bucket` is the first two hex digits of `sha1(gmail_id)`.
@@ -91,6 +97,38 @@ Labels are stored **per message**, as Gmail records them. Gmail's UI works
 Use `threads.labels_json` (or join through `thread_id`) to match that. This also
 explains Takeout's per-label files: `Inbox.mbox` contains whole threads, so
 some of its messages don't carry the `Inbox` label themselves.
+
+## `message_addresses`: one row per address on a message
+
+| column | type | notes |
+|---|---|---|
+| `message_id` | INTEGER | → `messages.id` (`ON DELETE CASCADE`) |
+| `role` | TEXT | `from`, `to`, `cc` or `bcc` |
+| `addr` | TEXT | lower-cased, as in the JSON columns |
+| `name` | TEXT | display name, `""` if none |
+
+Derived from `from_name`/`from_addr` and the `to_json`/`cc_json`/`bcc_json` columns, for
+"mail to/from X" queries that don't read every message. Addresses with no `addr` are left out.
+Indexes: `(addr, role)` and `message_id`.
+
+## `thread_notes`: the owner's notes on a thread
+
+| column | type | notes |
+|---|---|---|
+| `id` | INTEGER PK | `notes_fts.rowid` |
+| `thread_id` | TEXT UNIQUE | `messages.thread_id`. No foreign key, because `threads` is rebuilt on every import |
+| `body` | TEXT | plain text, `\n` line endings. An empty note is deleted, not stored |
+| `created_at`, `updated_at` | INTEGER | Unix time in **milliseconds** (unlike every other time here) |
+
+`notes_fts` is an FTS5 index of `body` (`content='thread_notes'`, same tokenizer as
+`messages_fts`). Triggers on `thread_notes` keep it current, so any writer can use plain
+`INSERT`/`UPDATE`/`DELETE` on `thread_notes`. Because the index has content, `snippet()` and
+`highlight()` work on it:
+
+```sql
+SELECT n.thread_id, snippet(notes_fts, 0, '[', ']', '…', 10) FROM notes_fts
+JOIN thread_notes n ON n.id = notes_fts.rowid WHERE notes_fts MATCH 'landlord';
+```
 
 ## `messages_fts`: full-text search
 
@@ -149,3 +187,11 @@ behave:
 5. **`threads`** is derived. After changing labels or deleting messages, recompute
    the affected rows (delete the row if the thread has no messages left), using the
    same definitions as above.
+6. **Deleting an attachment's file** (keeping the email): set `attachments.deleted_at`
+   to the current time and commit, then delete the file. Keep the row. Imports never
+   re-parse a stored message, so the file is not written again.
+7. **Deleting a message** (extends rule 4): if it was the last message of its thread,
+   also delete the thread's `thread_notes` row, in the same transaction.
+8. **Notes** belong to the owner, and imports never change them. A writer that changes
+   a note sets `updated_at` (milliseconds); viewers use it to notice a change made
+   in another window.

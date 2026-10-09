@@ -155,6 +155,15 @@ def test_cli_import_and_stats(tmp_path, capsys):
     assert main(["stats", "--out", str(out)]) == 0
     text = capsys.readouterr().out
     assert "Messages:     3" in text and "Threads:      2" in text and "Spam" in text
+    assert "Notes:        0" in text and "deleted" not in text
+    conn = sqlite3.connect(out / "mail.db")
+    conn.execute("UPDATE attachments SET deleted_at = 1")
+    conn.execute("INSERT INTO thread_notes(thread_id, body, created_at, updated_at) VALUES ('t', 'n', 1, 1)")
+    conn.commit()
+    conn.close()
+    assert main(["stats", "--out", str(out)]) == 0
+    text = capsys.readouterr().out
+    assert "1 deleted (10 B freed)" in text and "Notes:        1" in text
     assert main(["import", str(tmp_path / "nope.mbox"), "--out", str(out)]) == 2
 
 

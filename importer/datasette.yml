@@ -20,7 +20,15 @@ databases:
         label_column: subject
       labels:
         label_column: name
+      thread_notes:
+        description: Your notes on threads (written in a viewer). Times are Unix milliseconds.
+        fts_table: notes_fts
+        fts_pk: id
+        sort_desc: updated_at
+        label_column: body
       messages_fts:
+        hidden: true
+      notes_fts:
         hidden: true
     queries:
       search:
@@ -54,6 +62,22 @@ databases:
           from messages m
           where m.thread_id = :thread_id
           order by coalesce(m.received_utc, m.date_utc)
+      notes:
+        title: Search notes
+        description: "Full-text search in your notes. Examples: landlord, \"exact phrase\""
+        sql: |-
+          select n.thread_id, t.subject, datetime(n.updated_at / 1000, 'unixepoch') as updated, n.body
+          from notes_fts f join thread_notes n on n.id = f.rowid
+          left join threads t on t.thread_id = n.thread_id
+          where notes_fts match :q
+          order by n.updated_at desc
+      mailing_lists:
+        title: Mailing lists
+        sql: |-
+          select list_id, max(list_name) as name, count(*) as messages,
+                 datetime(max(coalesce(received_utc, date_utc)), 'unixepoch') as last
+          from messages where list_id is not null
+          group by list_id order by messages desc
       label_counts:
         title: Label counts
         sql: |-
