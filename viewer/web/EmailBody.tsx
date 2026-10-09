@@ -52,7 +52,7 @@ export function prepareHtml(raw: string, attachments: AttachmentInfo[], showImag
     "style-src 'unsafe-inline'",
     `font-src data:${showImages ? " https:" : ""}`,
   ].join("; ");
-  const head = `<meta http-equiv="Content-Security-Policy" content="${csp}"><style>body{margin:0;padding:8px 0;font:14px Arial,Helvetica,sans-serif;color:#222;background:#fff;overflow-wrap:anywhere}img{max-width:100%;height:auto}</style>`;
+  const head = `<meta http-equiv="Content-Security-Policy" content="${csp}"><style>body{margin:0;padding:12px 16px;font:14px Arial,Helvetica,sans-serif;color:#222;background:#fff;overflow-wrap:anywhere}img{max-width:100%;height:auto}</style>`;
   const html = clean.includes("<head>") ? clean.replace("<head>", `<head>${head}`) : `<!doctype html><html><head>${head}</head><body>${clean}</body></html>`;
   return { html, remoteImages };
 }
@@ -68,8 +68,10 @@ function HtmlBody({ html, attachments }: { html: string; attachments: Attachment
     let observer: ResizeObserver | undefined;
     const fit = () => {
       const doc = f.contentDocument;
-      if (!doc?.documentElement) return;
-      f.style.height = `${Math.max(doc.documentElement.scrollHeight, doc.body?.scrollHeight ?? 0) + 4}px`;
+      if (!doc?.body) return;
+      // Measure the body: the root element is never shorter than the frame, so a short email
+      // would keep the frame's first (default 150px) height.
+      f.style.height = `${Math.ceil(Math.max(doc.body.scrollHeight, doc.body.getBoundingClientRect().height)) + 4}px`;
     };
     // Keys pressed after clicking inside the email still reach the app's shortcuts.
     const forward = (e: KeyboardEvent) =>
