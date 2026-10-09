@@ -153,9 +153,11 @@ export function ThreadView({ thread, me, view }: { thread: ThreadDetail; me: str
       <div className="thread-title">
         <h1>{thread.subject || "(no subject)"}</h1>
         {thread.labels.map((l) => <Chip key={l} name={l} />)}
-        <button className="link-button expand-all" onClick={() => setExpanded(new Set(shown.map((m) => m.id)))}>
-          Expand all
-        </button>
+        {shown.some((m) => !expanded.has(m.id)) && (
+          <button className="link-button expand-all" onClick={() => setExpanded(new Set(shown.map((m) => m.id)))}>
+            Expand all
+          </button>
+        )}
       </div>
       {hidden > 0 && (
         <div className="hidden-note">

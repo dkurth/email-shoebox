@@ -113,3 +113,20 @@ test("read-only mode shows no write actions", async ({ page }) => {
   await expect(page.locator(".toast")).toContainText("read-only");
   await expect(subjects(page)).toHaveCount(5);
 });
+
+test("Expand all shows only when a message is collapsed", async ({ page }) => {
+  server = await startServer();
+  await page.goto(server.url);
+  await expect(subjects(page)).toHaveCount(5);
+  await page.keyboard.press("Enter"); // "Welcome to the archive": one message
+  await expect(page.locator(".msg.expanded")).toHaveCount(1);
+  await expect(page.locator(".expand-all")).toHaveCount(0);
+  await page.keyboard.press("u");
+  await expect(subjects(page)).toHaveCount(5);
+  await page.keyboard.press("j");
+  await page.keyboard.press("Enter"); // "Trip planning": the read first message is collapsed
+  await expect(page.locator(".msg.collapsed")).not.toHaveCount(0);
+  await page.locator(".expand-all").click();
+  await expect(page.locator(".msg.collapsed")).toHaveCount(0);
+  await expect(page.locator(".expand-all")).toHaveCount(0);
+});
