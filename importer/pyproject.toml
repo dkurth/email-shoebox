@@ -1,0 +1,25 @@
+[project]
+name = "gmail2sqlite"
+version = "0.3.0"
+description = "Convert a Gmail Takeout mbox export into a SQLite database plus a folder of attachments"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+gmail2sqlite = "gmail2sqlite.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gmail2sqlite"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["enron: downloads the public Enron sample mbox and imports it (opt-in: pytest -m enron)"]
+addopts = "-m 'not enron'"

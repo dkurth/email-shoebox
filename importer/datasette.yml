@@ -1,0 +1,86 @@
+# Datasette metadata for browsing mail.db before the real web interface exists.
+#   uvx datasette@0.65.5 gmail-archive/mail.db -m datasette.yml
+# (Datasette 0.65 reads table settings from the -m metadata file.)
+title: Gmail archive
+databases:
+  mail:
+    tables:
+      messages:
+        fts_table: messages_fts
+        fts_pk: id
+        sort_desc: received_utc
+        label_column: subject
+      message_list:
+        description: One row per message with readable dates and labels. Use the search box for full-text search.
+        fts_table: messages_fts
+        fts_pk: id
+        sort_desc: received
+      threads:
+        sort_desc: last_date
+        label_column: subject
+      labels:
+        label_column: name
+      thread_notes:
+        description: Your notes on threads (written in a viewer). Times are Unix milliseconds.
+        fts_table: notes_fts
+        fts_pk: id
+        sort_desc: updated_at
+        label_column: body
+      messages_fts:
+        hidden: true
+      notes_fts:
+        hidden: true
+    queries:
+      search:
+        title: Search mail
+        description: "Full-text search. Examples: invoice, \"exact phrase\", people:alice, subject:report, attachment_names:pdf"
+        sql: |-
+          select m.id, datetime(coalesce(m.received_utc, m.date_utc), 'unixepoch') as received,
+                 m.from_name, m.from_addr, m.subject, m.snippet, m.has_attachments
+          from messages m
+          where m.id in (select rowid from messages_fts where messages_fts match :q)
+          order by coalesce(m.received_utc, m.date_utc) desc
+          limit 500
+      label:
+        title: Messages with a label
+        description: "Label names as Gmail shows them, e.g. Inbox, Sent, Starred, or one of your own."
+        sql: |-
+          select m.id, datetime(coalesce(m.received_utc, m.date_utc), 'unixepoch') as received,
+                 m.from_name, m.from_addr, m.subject, m.snippet
+          from messages m
+          join message_labels ml on ml.message_id = m.id
+          join labels l on l.id = ml.label_id
+          where l.name = :label
+          order by coalesce(m.received_utc, m.date_utc) desc
+          limit 1000
+      thread:
+        title: A whole thread
+        description: Paste a thread_id from the messages or threads table.
+        sql: |-
+          select m.id, datetime(coalesce(m.received_utc, m.date_utc), 'unixepoch') as received,
+                 m.from_name, m.from_addr, m.subject, m.body_text
+          from messages m
+          where m.thread_id = :thread_id
+          order by coalesce(m.received_utc, m.date_utc)
+      notes:
+        title: Search notes
+        description: "Full-text search in your notes. Examples: landlord, \"exact phrase\""
+        sql: |-
+          select n.thread_id, t.subject, datetime(n.updated_at / 1000, 'unixepoch') as updated, n.body
+          from notes_fts f join thread_notes n on n.id = f.rowid
+          left join threads t on t.thread_id = n.thread_id
+          where notes_fts match :q
+          order by n.updated_at desc
+      mailing_lists:
+        title: Mailing lists
+        sql: |-
+          select list_id, max(list_name) as name, count(*) as messages,
+                 datetime(max(coalesce(received_utc, date_utc)), 'unixepoch') as last
+          from messages where list_id is not null
+          group by list_id order by messages desc
+      label_counts:
+        title: Label counts
+        sql: |-
+          select l.name, count(*) as messages
+          from labels l join message_labels ml on ml.label_id = l.id
+          group by l.id order by messages desc
