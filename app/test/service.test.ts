@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { ImportState, ScanEvent } from "../src/shared/api.ts";
-import { Service } from "../src/main/service.ts";
+import { collectionSize, folderSize, Service } from "../src/main/service.ts";
 import { bigMbox, PYTHON, takeoutFolder, tempDir } from "./helpers.ts";
 
 function service(dataDir = tempDir()) {
@@ -152,7 +152,17 @@ describe("changing collections", () => {
     expect(svc.list(null)).toEqual([]);
     expect(fs.existsSync(path.join(c.path, "mail.db"))).toBe(true);
     svc.reg.collections.push(c);
-    expect(svc.list(null, true)[0].sizeBytes).toBeGreaterThan(10_000);
+    // The size from the database is the size of the files on disk.
+    const size = svc.list(null, true)[0].sizeBytes!;
+    expect(size).toBeGreaterThan(10_000);
+    expect(Math.abs(size - folderSize(c.path))).toBeLessThan(64 * 1024); // only small files differ: mail.db-shm, folders
+    // A deleted attachment file no longer counts.
+    const Database = (await import("better-sqlite3")).default;
+    const db = new Database(path.join(c.path, "mail.db"));
+    const biggest = db.prepare("SELECT id, size_bytes FROM attachments ORDER BY size_bytes DESC LIMIT 1").get() as { id: number; size_bytes: number };
+    db.prepare("UPDATE attachments SET deleted_at = 1 WHERE id = ?").run(biggest.id);
+    db.close();
+    expect(collectionSize(c.path)).toBe(size - biggest.size_bytes);
     await svc.deleteFromDisk(c.id);
     expect(fs.existsSync(c.path)).toBe(false);
     expect(svc.list(null)).toEqual([]);

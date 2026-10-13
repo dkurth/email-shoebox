@@ -285,7 +285,7 @@ function registerIpc(): void {
   });
   handle(CH.deleteCollection, page, async (e, id: string) => {
     const c = service.get(id);
-    const size = folderSize(c.path);
+    const size = folderSize(c.path); // exact: the delete removes everything in the folder, also files the database doesn't list
     const r = await dialog.showMessageBox(windowOf(e)!, {
       type: "warning",
       buttons: ["Delete", "Cancel"],

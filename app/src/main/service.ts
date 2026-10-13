@@ -92,7 +92,7 @@ export class Service {
         current: c.id === currentId,
         missing,
         messages: missing ? null : messageCount(c.path),
-        sizeBytes: withSizes && !missing ? folderSize(c.path) : null,
+        sizeBytes: withSizes && !missing ? collectionSize(c.path) : null,
       };
     });
   }
@@ -405,6 +405,28 @@ function writeNameToArchive(dir: string, name: string): void {
   }
 }
 
+/**
+ * The disk space of a collection, from the database: mail.db (with its -wal file) plus the attachment files it
+ * lists that aren't deleted. Other files someone put in the folder (such as old database backups) don't count. Fast: walking a folder of 40,000 attachments takes seconds, this takes milliseconds.
+ * A file that "Merge duplicate files" turned into a hard link counts at full size each time (folderSize does too).
+ */
+export function collectionSize(dir: string): number {
+  let total = 0;
+  for (const name of ["mail.db", "mail.db-wal"]) {
+    try {
+      total += fs.statSync(path.join(dir, name)).size;
+    } catch {
+      /* no WAL file: nothing to add */
+    }
+  }
+  const attachments =
+    withDb(dir, (db) => db.prepare("SELECT coalesce(sum(size_bytes), 0) FROM attachments WHERE deleted_at IS NULL").pluck().get() as number) ??
+    // Schema version 2 has no deleted_at (and no way to delete attachment files).
+    withDb(dir, (db) => db.prepare("SELECT coalesce(sum(size_bytes), 0) FROM attachments").pluck().get() as number);
+  return total + (attachments ?? 0);
+}
+
+/** The bytes of every file in a folder: what deleting it frees. Slow for a large collection (it stats every file); for the list, see collectionSize. */
 export function folderSize(dir: string): number {
   let total = 0;
   const walk = (d: string) => {
