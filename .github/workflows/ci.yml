@@ -15,7 +15,7 @@ jobs:
         working-directory: importer
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.2.0  # this action has no major-version tag
       - run: uv run python -m pytest -q
 
   viewer:
@@ -62,7 +62,9 @@ jobs:
         working-directory: app
       - name: End-to-end tests (Electron needs a display)
         run: |
-          npx electron --version
+          node node_modules/electron/install.js
+          # Ubuntu 24.04 blocks the user namespaces that Electron's sandbox needs.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           sudo apt-get install -y xvfb
           xvfb-run -a npm run e2e
         working-directory: app
