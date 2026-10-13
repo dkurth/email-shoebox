@@ -98,6 +98,6 @@ Tests:
 | `cd importer && uv run python -m pytest` | the importer |
 | `cd viewer && npm test && npm run e2e` | the viewer (Vitest; Playwright) |
 | `cd app && npm test` | the app's collections, imports and server, with the real importer |
-| `cd app && npm run build && npm run e2e` | the whole app in Electron (Playwright) |
+| `cd app && npm run build && npm run e2e` | the whole app in Electron (Playwright). Its windows stay hidden; add `SHOEBOX_HIDDEN_WINDOWS=0` to watch them. |
 
 **Installers:** `cd app && npm run dist` makes the installer for your computer in `app/release`. `node scripts/dist.ts --mac --arm64 --x64` makes both macOS versions. The **Release** workflow on GitHub makes them for macOS, Windows and Linux; push a tag such as `v0.1.0` to upload them to a draft release. [`app/scripts/dist.ts`](app/scripts/dist.ts) explains macOS signing.

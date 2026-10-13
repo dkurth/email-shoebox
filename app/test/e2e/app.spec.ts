@@ -8,7 +8,8 @@ import { APP_DIR, otherMbox, takeoutFolder, tempDir } from "../helpers.ts";
 const executable = process.env.SHOEBOX_APP_EXECUTABLE;
 
 async function launch(userData: string): Promise<ElectronApplication> {
-  const env = { ...process.env, SHOEBOX_USER_DATA: userData, SHOEBOX_NO_UPDATES: "1" };
+  // Windows stay hidden, so the tests don't take over the screen. SHOEBOX_HIDDEN_WINDOWS=0 shows them, to watch.
+  const env = { ...process.env, SHOEBOX_USER_DATA: userData, SHOEBOX_NO_UPDATES: "1", SHOEBOX_HIDDEN_WINDOWS: process.env.SHOEBOX_HIDDEN_WINDOWS ?? "1" };
   return executable ? electron.launch({ executablePath: path.resolve(APP_DIR, executable), env }) : electron.launch({ args: [APP_DIR], env });
 }
 
@@ -53,6 +54,10 @@ test("first launch: choose a backup, name it, import it, read it", async () => {
   await expect(viewer.locator(".collection-button")).toHaveText("Personal");
   await expect(viewer).toHaveTitle(/Personal - Email Shoebox/);
   await expect(viewer.locator(".thread-row").first()).toBeVisible();
+  if ((process.env.SHOEBOX_HIDDEN_WINDOWS ?? "1") === "1") {
+    // Nothing came onto the screen.
+    expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().filter((w) => w.isVisible()).length)).toBe(0);
+  }
 
   // The collection is in the app data folder, with its name inside the archive too.
   const reg = JSON.parse(fs.readFileSync(path.join(userData, "collections.json"), "utf8"));

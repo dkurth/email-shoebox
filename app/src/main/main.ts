@@ -15,6 +15,18 @@ import { checkForUpdates } from "./updater.ts";
 // Tests (and anyone who wants a second, separate set of collections) can choose the data folder.
 if (process.env.SHOEBOX_USER_DATA) app.setPath("userData", process.env.SHOEBOX_USER_DATA);
 
+// SHOEBOX_HIDDEN_WINDOWS=1: never show a window or come to the front (the end-to-end tests set it, so they don't
+// get in the way of someone using the computer). The pages still load and run; tests drive them as usual.
+const hidden = process.env.SHOEBOX_HIDDEN_WINDOWS === "1";
+
+/** Show a window and bring it to the front, unless windows are hidden. */
+function reveal(w: BrowserWindow): void {
+  if (hidden) return;
+  if (w.isMinimized()) w.restore();
+  w.show();
+  w.focus();
+}
+
 const distDir = import.meta.dirname; // dist/ (inside app.asar when packaged)
 const appDir = path.dirname(distDir);
 const UI_INDEX = path.join(distDir, "ui", "index.html");
@@ -32,10 +44,7 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   app.on("second-instance", () => {
     const w = appWindow ?? mainWindow;
-    if (w) {
-      if (w.isMinimized()) w.restore();
-      w.focus();
-    }
+    if (w) reveal(w);
   });
   app.whenReady().then(start, (e) => {
     dialog.showErrorBox("Email Shoebox could not start", String(e?.stack ?? e));
@@ -44,6 +53,7 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 async function start(): Promise<void> {
+  if (hidden) app.dock?.hide(); // macOS: no Dock icon, so the app can't come to the front
   service = new Service({
     dataDir: app.getPath("userData"),
     python: findPython({ packaged: app.isPackaged, resourcesPath: process.resourcesPath, appDir }),
@@ -70,7 +80,8 @@ async function start(): Promise<void> {
 
 // ---------------------------------------------------------------- windows
 
-const baseWebPreferences = { contextIsolation: true, sandbox: true, nodeIntegration: false, spellcheck: false } as const;
+// Hidden windows count as in the background, and Chromium slows the timers of background pages; not when hidden on purpose.
+const baseWebPreferences = { contextIsolation: true, sandbox: true, nodeIntegration: false, spellcheck: false, backgroundThrottling: !hidden } as const;
 
 let loads = 0;
 
@@ -79,7 +90,7 @@ function showMainWindow(hash = "#/inbox"): BrowserWindow {
     // Another collection is open now: load the page again. A new query makes it a new document; with only a new
     // hash (or the same URL), Chromium stays on the page, and the page keeps the old collection's mail.
     mainWindow.loadURL(`${server.origin}/?load=${++loads}${hash}`);
-    mainWindow.show();
+    reveal(mainWindow);
     return mainWindow;
   }
   const w = new BrowserWindow({
@@ -93,7 +104,7 @@ function showMainWindow(hash = "#/inbox"): BrowserWindow {
     webPreferences: { ...baseWebPreferences, preload: path.join(distDir, "preload-viewer.cjs") },
   });
   mainWindow = w;
-  w.once("ready-to-show", () => w.show());
+  w.once("ready-to-show", () => reveal(w));
   w.on("closed", () => {
     if (mainWindow === w) mainWindow = null;
   });
@@ -111,7 +122,7 @@ function showAppWindow(page: Page, params: Record<string, string> = {}): Browser
   const hash = `#/${page}${Object.keys(params).length ? "?" + new URLSearchParams(params) : ""}`;
   if (appWindow && !appWindow.isDestroyed()) {
     appWindow.loadURL(UI_URL + hash);
-    appWindow.focus();
+    reveal(appWindow);
     return appWindow;
   }
   const width = 680;
@@ -129,7 +140,7 @@ function showAppWindow(page: Page, params: Record<string, string> = {}): Browser
     webPreferences: { ...baseWebPreferences, preload: path.join(distDir, "preload-app.cjs") },
   });
   appWindow = w;
-  w.once("ready-to-show", () => w.show());
+  w.once("ready-to-show", () => reveal(w));
   w.on("close", (e) => {
     if (quitting || !service.isImporting()) return;
     // The import keeps going without the window, but then nobody sees it; ask first.
@@ -374,7 +385,7 @@ function openOutside(url: string): void {
 
 /** Attachments open in a plain window: no preload, so the page can't reach the app. */
 function openAttachmentWindow(url: string): void {
-  const w = new BrowserWindow({ width: 900, height: 900, title: "Email Shoebox", webPreferences: { ...baseWebPreferences } });
+  const w = new BrowserWindow({ width: 900, height: 900, title: "Email Shoebox", show: !hidden, webPreferences: { ...baseWebPreferences } });
   w.loadURL(url);
 }
 
