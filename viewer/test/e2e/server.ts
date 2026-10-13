@@ -19,7 +19,7 @@ export async function startServer(opts: { readOnly?: boolean } = {}): Promise<Se
     if (r.status !== 0) throw new Error("vite build failed: " + r.stderr);
     built = true;
   }
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gmail-viewer-e2e-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "email-shoebox-e2e-"));
   fs.cpSync(path.join(repo, "test/fixtures/archive"), dir, { recursive: true, filter: (s) => !/\.db-(wal|shm)$/.test(s) });
   const port = 5200 + Math.floor(Math.random() * 700);
   const args = [path.join(repo, "server/main.ts"), dir, "--no-open", "--port", String(port), ...(opts.readOnly ? ["--read-only"] : [])];

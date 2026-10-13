@@ -7,7 +7,7 @@ import { parseArgs } from "node:util";
 import { createApp } from "./app.ts";
 import { ArchiveError, accountAddresses, openArchive } from "./db.ts";
 
-const USAGE = `Usage: gmail-viewer [ARCHIVE_DIR] [options]
+const USAGE = `Usage: email-shoebox [ARCHIVE_DIR] [options]
 
 ARCHIVE_DIR   folder made by gmail2sqlite (holds mail.db and attachments/); default ./gmail-archive
 

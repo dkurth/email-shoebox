@@ -10,7 +10,7 @@ export const ORIGIN = `http://127.0.0.1:${PORT}`;
 
 /** A fresh copy of the committed test archive, so tests can change it freely. */
 export function tempArchive(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gmail-viewer-test-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "email-shoebox-test-"));
   fs.cpSync(FIXTURE, dir, { recursive: true, filter: (src) => !/\.db-(wal|shm)$/.test(src) });
   return dir;
 }
@@ -26,7 +26,7 @@ export function setup(opts: { readOnly?: boolean } = {}) {
   const post = async (url: string, data: unknown, method = "POST") => {
     const res = await app.request(url, {
       method,
-      headers: { host: `127.0.0.1:${PORT}`, origin: ORIGIN, "x-gmail-viewer": "1", "content-type": "application/json" },
+      headers: { host: `127.0.0.1:${PORT}`, origin: ORIGIN, "x-email-shoebox": "1", "content-type": "application/json" },
       body: JSON.stringify(data),
     });
     return { status: res.status, body: await res.json() };

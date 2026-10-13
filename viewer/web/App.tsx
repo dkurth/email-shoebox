@@ -173,7 +173,7 @@ export function App() {
 
   useEffect(() => {
     const unread = sidebar?.folders.find((f) => f.view === route.view)?.count;
-    document.title = `${admin ? "Archive stats" : viewTitle(route.view)}${unread ? ` (${unread})` : ""} - Gmail Shoebox`;
+    document.title = `${admin ? "Archive stats" : viewTitle(route.view)}${unread ? ` (${unread})` : ""} - Email Shoebox`;
   }, [route.view, sidebar, admin]);
 
   const noteSaver = useNoteSaver(route.threadId ? thread : null, route.threadId);
@@ -479,7 +479,7 @@ export function App() {
       <div className="app">
         <header className="topbar">
           <a className="brand" href="#/inbox">
-            <img className="brand-icon" src={logoUrl} alt="" width={28} height={28} /> Gmail Shoebox
+            <img className="brand-icon" src={logoUrl} alt="" width={28} height={28} /> Email Shoebox
           </a>
           {session?.readOnly && <span className="badge">read-only</span>}
           <SearchBox ref={searchInput} query={query} onSearch={search} onHelp={() => setSearchHelp(true)} />

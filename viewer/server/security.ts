@@ -1,7 +1,7 @@
 // Stop other websites (and DNS-rebinding tricks) from talking to this local server.
 import type { MiddlewareHandler } from "hono";
 
-export const WRITE_HEADER = "x-gmail-viewer";
+export const WRITE_HEADER = "x-email-shoebox";
 
 export function guard(getPort: () => number, readOnly: boolean, extraOrigins: string[] = []): MiddlewareHandler {
   return async (c, next) => {

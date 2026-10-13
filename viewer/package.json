@@ -1,14 +1,14 @@
 {
-  "name": "local-gmail-viewer",
+  "name": "email-shoebox-viewer",
   "version": "0.1.0",
-  "description": "A Gmail-like viewer for archives made by gmail2sqlite. Runs locally.",
+  "description": "The Email Shoebox viewer: a familiar, local-only interface for email archives made by the importer.",
   "private": true,
   "type": "module",
   "engines": {
     "node": ">=24"
   },
   "bin": {
-    "gmail-viewer": "scripts/start.ts"
+    "email-shoebox": "scripts/start.ts"
   },
   "scripts": {
     "start": "node scripts/start.ts",

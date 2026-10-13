@@ -1,0 +1,6 @@
+.DS_Store
+# real mail never belongs in the repo
+data/
+# plan docs stay local
+plan-*
+plans-completed/

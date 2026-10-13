@@ -1,4 +1,4 @@
-# gmail2sqlite
+# gmail2sqlite: the Email Shoebox importer
 
 Turn a Gmail export (Google Takeout `.mbox`) into:
 
@@ -9,13 +9,13 @@ It streams the input, so a mailbox of any size works. Memory use depends on the
 largest single message, not the mailbox size. It has no runtime dependencies
 beyond Python 3.11+.
 
-The output is meant to be read by a separate web interface. [SCHEMA.md](SCHEMA.md)
+The output is read by the [Email Shoebox viewer](../viewer). [SCHEMA.md](SCHEMA.md)
 documents the format.
 
 ## Install
 
 ```sh
-cd gmail2sqlite
+cd importer
 uv tool install -e .          # puts `gmail2sqlite` on your PATH
 # or, without installing:  uv run gmail2sqlite ...
 ```
@@ -115,8 +115,8 @@ sqlite3 gmail-archive/mail.db \
 
 ### 3. Read it like Gmail
 
-[local-gmail-viewer](../local-gmail-viewer) is a separate project: a Gmail-like
-viewer for these archives that runs locally (`npm start -- ../gmail-archive`).
+The [viewer](../viewer), in this same repo, is a Gmail-like viewer for these
+archives that runs locally (`npm start -- ../gmail-archive`).
 Its label changes, deletes, notes and deleted attachment files follow the
 "Rules for writers" in SCHEMA.md, so later imports keep them.
 

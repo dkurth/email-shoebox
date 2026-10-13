@@ -1,8 +1,9 @@
 #!/bin/sh
 # Rebuild the committed test archive from synthetic mail.
-# Needs the `gmail2sqlite` command on PATH (uv tool install -e path/to/gmail2sqlite).
+# Uses the importer in this repo (../../../importer); needs uv.
 set -eu
 cd "$(dirname "$0")"
+gmail2sqlite() { uv run --quiet --project ../../../importer gmail2sqlite "$@"; }
 node make-sample-mbox.ts > sample.mbox
 rm -rf archive
 gmail2sqlite import sample.mbox --out archive --quiet

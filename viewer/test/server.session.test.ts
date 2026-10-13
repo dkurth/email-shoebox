@@ -35,7 +35,7 @@ describe("security", () => {
   it("rejects writes from another origin or without the custom header", async () => {
     const { app } = setup();
     const base = { host: `127.0.0.1:${PORT}`, "content-type": "application/json" };
-    let res = await app.request("/api/anything", { method: "POST", headers: { ...base, origin: "https://evil.example", "x-gmail-viewer": "1" }, body: "{}" });
+    let res = await app.request("/api/anything", { method: "POST", headers: { ...base, origin: "https://evil.example", "x-email-shoebox": "1" }, body: "{}" });
     expect(res.status).toBe(403);
     res = await app.request("/api/anything", { method: "POST", headers: { ...base, origin: ORIGIN }, body: "{}" });
     expect(res.status).toBe(403);

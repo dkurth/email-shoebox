@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// `npm start` / `gmail-viewer`: build the web front end if it's missing or stale, then run the server.
+// `npm start` / `email-shoebox`: build the web front end if it's missing or stale, then run the server.
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";

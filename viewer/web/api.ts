@@ -17,7 +17,7 @@ export function get<T>(url: string): Promise<T> {
   return fetch(url).then((r) => handle<T>(r));
 }
 
-export const WRITE_HEADER = "x-gmail-viewer";
+export const WRITE_HEADER = "x-email-shoebox";
 
 export function post<T>(url: string, body: unknown, method = "POST"): Promise<T> {
   return fetch(url, {

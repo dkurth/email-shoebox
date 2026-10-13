@@ -33,7 +33,7 @@ export function openArchive(dir: string, opts: { readOnly?: boolean } = {}): Arc
     const hint =
       version < Math.min(...SUPPORTED_SCHEMA_VERSIONS)
         ? "Upgrade it by running `gmail2sqlite import` (version 0.3.0 or later) on it again."
-        : "Update local-gmail-viewer.";
+        : "Update Email Shoebox.";
     throw new ArchiveError(
       `${file} has schema version ${row?.value ?? "unknown"}; this viewer supports ${SUPPORTED_SCHEMA_VERSIONS.join(", ")}. ${hint}`,
     );
