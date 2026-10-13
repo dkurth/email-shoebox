@@ -32,3 +32,24 @@ export function bigMbox(copies = 40): string {
   fs.writeFileSync(file, out, "latin1");
   return file;
 }
+
+/** A small mailbox for a second account, with mail that the sample doesn't have. */
+export function otherMbox(): string {
+  const msg = [
+    "From 1800000000000000001@xxx Tue Jun 04 09:00:00 +0000 2019",
+    "X-GM-THRID: 1800000000000000001",
+    "X-Gmail-Labels: Inbox,Opened",
+    "From: Sam Lee <sam@example.org>",
+    "To: Other Owner <other@example.org>",
+    "Subject: Postcard from Lisbon",
+    "Date: Tue, 04 Jun 2019 09:00:00 +0000",
+    "Message-ID: <postcard@example.org>",
+    "Content-Type: text/plain; charset=UTF-8",
+    "",
+    "Wish you were here.",
+    "",
+  ].join("\r\n");
+  const file = path.join(tempDir(), "Inbox.mbox");
+  fs.writeFileSync(file, msg);
+  return file;
+}

@@ -1,7 +1,7 @@
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
-import { APP_DIR, takeoutFolder, tempDir } from "../helpers.ts";
+import { APP_DIR, otherMbox, takeoutFolder, tempDir } from "../helpers.ts";
 
 // SHOEBOX_APP_EXECUTABLE runs these tests on a packaged app (with its bundled Python), for example
 // "release/mac-arm64/Email Shoebox.app/Contents/MacOS/Email Shoebox". Without it, they run the app from dist/.
@@ -81,18 +81,23 @@ test("the collections menu: import another, switch, rename, delete", async () =>
   await welcome.getByRole("button", { name: "Import", exact: true }).click();
   const viewer = await viewerOpens;
   await expect(viewer.locator(".collection-button")).toHaveText("First");
+  const inbox = viewer.locator(".thread-row");
+  await expect(inbox.filter({ hasText: "Welcome to the archive" })).toBeVisible();
 
   // Import… from the menu opens the import page over the viewer.
   await viewer.locator(".collection-button").click();
   const importOpens = app.waitForEvent("window", { predicate: (p) => p.url().includes("#/import") });
   await viewer.getByRole("menuitem", { name: "Import…" }).click();
   const importPage = await importOpens;
-  await nextOpenDialog(app, [path.join(takeoutFolder(), "Takeout", "Mail", "Inbox.mbox")]);
+  await nextOpenDialog(app, [otherMbox()]);
   await importPage.getByRole("button", { name: /Choose a file/ }).click();
-  await expect(importPage.getByText(/messages in \d{4}/)).toBeVisible();
+  await expect(importPage.getByText(/1 messages in 2019/)).toBeVisible();
   await importPage.getByLabel("Name this collection").fill("Second");
   await importPage.getByRole("button", { name: "Import", exact: true }).click();
-  await expect(viewer.locator(".collection-button")).toHaveText("Second"); // it switched to the new one
+  // It switched to the new collection: the menu, and the mail itself.
+  await expect(viewer.locator(".collection-button")).toHaveText("Second");
+  await expect(inbox.filter({ hasText: "Postcard from Lisbon" })).toBeVisible();
+  await expect(inbox.filter({ hasText: "Welcome to the archive" })).toHaveCount(0);
 
   // Switch back with the menu.
   await viewer.locator(".collection-button").click();
@@ -100,6 +105,18 @@ test("the collections menu: import another, switch, rename, delete", async () =>
   await viewer.getByRole("menuitem", { name: /First/ }).click();
   await expect(viewer.locator(".collection-button")).toHaveText("First");
   await expect(viewer).toHaveTitle(/First - Email Shoebox/);
+  await expect(inbox.filter({ hasText: "Welcome to the archive" })).toBeVisible();
+  await expect(inbox.filter({ hasText: "Postcard from Lisbon" })).toHaveCount(0);
+
+  // Switching from inside a thread shows the other collection's inbox too.
+  await inbox.filter({ hasText: "Welcome to the archive" }).click();
+  await expect(viewer).toHaveURL(/#\/inbox\/.+/);
+  await viewer.locator(".collection-button").click();
+  await viewer.getByRole("menuitem", { name: /Second/ }).click();
+  await expect(inbox.filter({ hasText: "Postcard from Lisbon" })).toBeVisible();
+  await viewer.locator(".collection-button").click();
+  await viewer.getByRole("menuitem", { name: /First/ }).click();
+  await expect(inbox.filter({ hasText: "Welcome to the archive" })).toBeVisible();
 
   // Manage: rename one, delete the other.
   await viewer.locator(".collection-button").click();

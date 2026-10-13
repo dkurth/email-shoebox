@@ -72,9 +72,13 @@ async function start(): Promise<void> {
 
 const baseWebPreferences = { contextIsolation: true, sandbox: true, nodeIntegration: false, spellcheck: false } as const;
 
+let loads = 0;
+
 function showMainWindow(hash = "#/inbox"): BrowserWindow {
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.loadURL(`${server.origin}/${hash}`);
+    // Another collection is open now: load the page again. A new query makes it a new document; with only a new
+    // hash (or the same URL), Chromium stays on the page, and the page keeps the old collection's mail.
+    mainWindow.loadURL(`${server.origin}/?load=${++loads}${hash}`);
     mainWindow.show();
     return mainWindow;
   }
