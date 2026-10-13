@@ -43,7 +43,7 @@ export function CollectionsMenu({
         className="collection-button"
         aria-haspopup="menu"
         aria-expanded={open}
-        title="Switch collection"
+        title={current ? `${current.name}\nSwitch collection` : "Switch collection"}
         onClick={() => setOpen((o) => !o)}
       >
         <span className="collection-name">{current?.name ?? "Collections"}</span>
@@ -55,7 +55,8 @@ export function CollectionsMenu({
           className="label-options collections-menu"
           role="menu"
           aria-label="Collections"
-          style={{ top: rect.bottom + 4, left: Math.max(8, Math.min(rect.left, window.innerWidth - 328)) }}
+          // As wide as the names need, up to 480 px; longer names wrap.
+          style={{ top: rect.bottom + 4, left: Math.max(8, Math.min(rect.left, window.innerWidth - 488)) }}
           onKeyDown={(e) => {
             if (e.key === "Escape") {
               e.stopPropagation();
@@ -71,7 +72,7 @@ export function CollectionsMenu({
           }}
         >
           {list.map((c) => (
-            <button key={c.id} role="menuitem" className="menu-item collection-item" onClick={choose(() => c.id !== current?.id && onSwitch(c.id))}>
+            <button key={c.id} role="menuitem" className="menu-item collection-item" title={c.name} onClick={choose(() => c.id !== current?.id && onSwitch(c.id))}>
               <span className="collection-check">{c.id === current?.id && <Check size={16} />}</span>
               <span className="collection-item-name">{c.name}</span>
               <span className="collection-count">

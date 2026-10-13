@@ -99,9 +99,24 @@ test("the collections menu: import another, switch, rename, delete", async () =>
   await expect(inbox.filter({ hasText: "Postcard from Lisbon" })).toBeVisible();
   await expect(inbox.filter({ hasText: "Welcome to the archive" })).toHaveCount(0);
 
-  // Switch back with the menu.
+  // Switch back with the menu. The menu shows whole names, however long.
+  const longName = "Old letters from the family, kept in the attic since grandma's move (2004–2024)";
   await viewer.locator(".collection-button").click();
-  await expect(viewer.getByRole("menuitem", { name: /Second/ })).toContainText("messages");
+  await viewer.getByRole("menuitem", { name: "Manage collections…" }).click();
+  const renamer = await app.waitForEvent("window", { predicate: (p) => p.url().includes("#/manage") });
+  await renamer.getByTestId("collection").filter({ hasText: "Second" }).getByRole("button", { name: "Rename" }).click();
+  await renamer.getByLabel("New name").fill(longName);
+  await renamer.getByRole("button", { name: "Save" }).click();
+  await renamer.close();
+  await expect(viewer.locator(".collection-button")).toHaveAttribute("title", new RegExp(`^${longName.replace(/[()]/g, "\\$&")}`));
+  await viewer.locator(".collection-button").click();
+  const longItem = viewer.locator(".collection-item-name", { hasText: longName });
+  await expect(longItem).toHaveText(longName);
+  expect(await longItem.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true); // not cut off
+  await viewer.keyboard.press("Escape");
+
+  await viewer.locator(".collection-button").click();
+  await expect(viewer.getByRole("menuitem", { name: /Old letters from the family/ })).toContainText("messages");
   await viewer.getByRole("menuitem", { name: /First/ }).click();
   await expect(viewer.locator(".collection-button")).toHaveText("First");
   await expect(viewer).toHaveTitle(/First - Email Shoebox/);
@@ -112,7 +127,7 @@ test("the collections menu: import another, switch, rename, delete", async () =>
   await inbox.filter({ hasText: "Welcome to the archive" }).click();
   await expect(viewer).toHaveURL(/#\/inbox\/.+/);
   await viewer.locator(".collection-button").click();
-  await viewer.getByRole("menuitem", { name: /Second/ }).click();
+  await viewer.getByRole("menuitem", { name: /Old letters from the family/ }).click();
   await expect(inbox.filter({ hasText: "Postcard from Lisbon" })).toBeVisible();
   await viewer.locator(".collection-button").click();
   await viewer.getByRole("menuitem", { name: /First/ }).click();
@@ -125,7 +140,7 @@ test("the collections menu: import another, switch, rename, delete", async () =>
   const manage = await manageOpens;
   const rows = manage.getByTestId("collection");
   await expect(rows).toHaveCount(2);
-  const second = rows.filter({ hasText: "Second" });
+  const second = rows.filter({ hasText: "Old letters from the family" });
   await second.getByRole("button", { name: "Rename" }).click();
   await manage.getByLabel("New name").fill("Old letters");
   await manage.getByRole("button", { name: "Save" }).click();
