@@ -1,0 +1,7 @@
+node_modules/
+dist/
+release/
+build/python/
+build/importer/
+test-results/
+playwright-report/
