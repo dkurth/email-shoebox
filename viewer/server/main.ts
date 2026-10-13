@@ -80,7 +80,7 @@ export async function main(argv: string[]): Promise<void> {
   });
   serve({ fetch: app.fetch, hostname: "127.0.0.1", port }, () => {
     const url = `http://127.0.0.1:${port}/`;
-    console.log(`Gmail viewer: ${url}  (archive: ${archive.dir}${archive.readOnly ? ", read-only" : ""})`);
+    console.log(`Email Shoebox: ${url}  (archive: ${archive.dir}${archive.readOnly ? ", read-only" : ""})`);
     console.log("Press Ctrl-C to stop.");
     if (!values["no-open"]) openBrowser(url);
   });

@@ -11,6 +11,12 @@ export function jobState(name: string): JobState {
   return jobs.get(name) ?? { running: false, startedAt: null, finishedAt: null, progress: null, error: null };
 }
 
+/** The name of the job that is running, if any. The desktop app doesn't switch collections during a job. */
+export function runningJob(): string | null {
+  for (const [n, j] of jobs) if (j.running) return n;
+  return null;
+}
+
 /** Start a worker for a job. Only one job (of any kind) runs at a time. */
 export function startJob(name: string, script: URL, data: unknown): JobState {
   for (const [n, j] of jobs) if (j.running) throw new Busy(n === name ? "This is already running." : "Another maintenance job is running. Wait for it to finish.");

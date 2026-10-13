@@ -28,7 +28,13 @@ export interface AppOptions {
   getPort: () => number;
   staticDir?: string; // the built front end (dist/web); omitted in tests
   extraOrigins?: string[]; // dev server origin, e.g. http://localhost:5173
+  // Set by the desktop app:
+  token?: string; // every request must carry it in a cookie (see security.ts)
+  collectionName?: string; // shown in the collections menu and the window title
+  workerUrl?: (name: WorkerName) => URL; // where the job workers are after bundling
 }
+
+export type WorkerName = "compactWorker" | "dedupeWorker";
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -56,11 +62,19 @@ export function createApp(opts: AppOptions): Hono {
     return c.json({ error: err.message }, 500);
   });
 
-  app.use("*", guard(opts.getPort, archive.readOnly, opts.extraOrigins ?? []));
+  app.use("*", guard(opts.getPort, archive.readOnly, opts.extraOrigins ?? [], opts.token));
+  const workerUrl = opts.workerUrl ?? ((name: WorkerName) => new URL(`./${name}.ts`, import.meta.url));
 
   app.get("/api/session", (c) => {
     const version = archive.db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").pluck().get();
-    return c.json({ me: opts.me, schemaVersion: Number(version), readOnly: archive.readOnly, archiveDir: archive.dir });
+    return c.json({
+      me: opts.me,
+      schemaVersion: Number(version),
+      readOnly: archive.readOnly,
+      archiveDir: archive.dir,
+      desktop: opts.collectionName !== undefined,
+      collectionName: opts.collectionName ?? null,
+    });
   });
 
   const db = archive.db;
@@ -172,10 +186,10 @@ export function createApp(opts: AppOptions): Hono {
     if (free < need) {
       throw new ConflictError(`Compacting needs about ${Math.ceil(need / 1e9)} GB of free disk space; there is ${(free / 1e9).toFixed(1)} GB.`);
     }
-    return c.json(startJob("compact", new URL("./compactWorker.ts", import.meta.url), { archiveDir: archive.dir }));
+    return c.json(startJob("compact", workerUrl("compactWorker"), { archiveDir: archive.dir }));
   });
   app.get("/api/admin/dedupe", (c) => c.json(jobState("dedupe")));
-  app.post("/api/admin/dedupe", (c) => c.json(startJob("dedupe", new URL("./dedupeWorker.ts", import.meta.url), { archiveDir: archive.dir })));
+  app.post("/api/admin/dedupe", (c) => c.json(startJob("dedupe", workerUrl("dedupeWorker"), { archiveDir: archive.dir })));
   app.get("/api/admin/person", (c) => {
     const addr = c.req.query("addr");
     if (!addr) throw new BadRequest("addr is required");

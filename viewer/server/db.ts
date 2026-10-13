@@ -45,6 +45,31 @@ export function openArchive(dir: string, opts: { readOnly?: boolean } = {}): Arc
   return { db, dir: abs, readOnly };
 }
 
+/** The schema version of an archive, read without opening it for use. null if there is no readable mail.db. */
+export function readSchemaVersion(dir: string): number | null {
+  const file = path.join(path.resolve(dir), "mail.db");
+  if (!fs.existsSync(file)) return null;
+  let db: DB | undefined;
+  try {
+    db = new Database(file, { readonly: true, fileMustExist: true });
+    const row = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string } | undefined;
+    return row ? Number(row.value) : null;
+  } catch {
+    return null;
+  } finally {
+    db?.close();
+  }
+}
+
+/** The name the desktop app shows for this archive. A viewer-owned meta key. */
+export function collectionName(db: DB): string | undefined {
+  return getMeta(db, "collection_name");
+}
+
+export function setCollectionName(db: DB, name: string): void {
+  setMeta(db, "collection_name", name);
+}
+
 export function getMeta(db: DB, key: string): string | undefined {
   const row = db.prepare("SELECT value FROM meta WHERE key = ?").get(key) as { value: string } | undefined;
   return row?.value;

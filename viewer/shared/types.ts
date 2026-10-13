@@ -7,6 +7,8 @@ export interface Session {
   schemaVersion: number;
   readOnly: boolean;
   archiveDir: string;
+  desktop: boolean; // running in the desktop app (window.shoebox is there)
+  collectionName: string | null;
 }
 
 export interface SidebarItem {
