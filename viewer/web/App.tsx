@@ -509,8 +509,8 @@ export function App() {
         <header className="topbar">
           <a className="brand" href="#/inbox">
             <img className="brand-icon" src={logoUrl} alt="" width={28} height={28} /> Email Shoebox
+            {session?.readOnly && <span className="badge">read-only</span>}
           </a>
-          {session?.readOnly && <span className="badge">read-only</span>}
           <SearchBox ref={searchInput} query={query} onSearch={search} onHelp={() => setSearchHelp(true)} />
           <span className="spacer" />
           {session?.desktop && (
