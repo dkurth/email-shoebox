@@ -1,7 +1,7 @@
 {
   "name": "email-shoebox",
   "productName": "Email Shoebox",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Keep your old emails in a shoebox: import a Gmail backup and read it in a familiar interface, all on your own computer.",
   "author": "dkurth",
   "homepage": "https://github.com/dkurth/email-shoebox",
