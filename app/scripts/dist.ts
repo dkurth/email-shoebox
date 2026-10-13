@@ -28,6 +28,11 @@ function run(cmd: string, cmdArgs: string[], env: NodeJS.ProcessEnv = {}): void 
   if (r.status !== 0) process.exit(r.status ?? 1);
 }
 
+// CI passes unset secrets as empty strings; electron-builder would read an empty CSC_LINK as a file path.
+for (const name of ["CSC_LINK", "CSC_KEY_PASSWORD", "CSC_NAME", "WIN_CSC_LINK", "WIN_CSC_KEY_PASSWORD", "APPLE_ID", "APPLE_APP_SPECIFIC_PASSWORD", "APPLE_TEAM_ID"]) {
+  if (process.env[name] === "") delete process.env[name];
+}
+
 const macSigned = platform === "darwin" && !!(process.env.CSC_LINK || process.env.CSC_NAME);
 const notarize = macSigned && !!(process.env.APPLE_ID && process.env.APPLE_APP_SPECIFIC_PASSWORD && process.env.APPLE_TEAM_ID);
 
