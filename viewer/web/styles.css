@@ -361,3 +361,15 @@ mark.hl { background: #fde293; color: inherit; border-radius: 2px; }
 .admin-images .report-filters .pager { margin-left: auto; }
 .maintenance p { max-width: 720px; }
 .gallery-footer { display: flex; justify-content: flex-end; margin-top: 16px; }
+
+/* The desktop app's collections menu (CollectionsMenu.tsx) */
+.collection-button { display: inline-flex; align-items: center; gap: 4px; max-width: 280px; height: 36px; border: 1px solid var(--line); background: var(--panel); border-radius: 18px; padding: 0 10px 0 14px; cursor: pointer; }
+.collection-button:hover { background: var(--hover); }
+.collection-button[aria-expanded="true"] { background: var(--active); }
+.collection-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.collections-menu { width: 320px; z-index: 15; padding: 6px; }
+.collection-item { display: flex; align-items: center; gap: 6px; }
+.collection-check { width: 16px; flex-shrink: 0; display: inline-flex; }
+.collection-item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.collection-count { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.menu-separator { height: 1px; background: var(--line); margin: 6px 0; }

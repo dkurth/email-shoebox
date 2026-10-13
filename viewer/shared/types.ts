@@ -11,6 +11,22 @@ export interface Session {
   collectionName: string | null;
 }
 
+/** The desktop app's bridge (window.shoebox), for the collections menu. Not there in a browser. */
+export interface DesktopBridge {
+  collections(): Promise<{ current: string | null; list: CollectionChoice[] }>;
+  switchTo(id: string): Promise<{ ok: true } | { ok: false; error: string }>;
+  openImport(): Promise<void>;
+  openManage(): Promise<void>;
+  onCollectionsChanged(cb: () => void): () => void;
+}
+
+export interface CollectionChoice {
+  id: string;
+  name: string;
+  messages: number | null;
+  incomplete: boolean;
+}
+
 export interface SidebarItem {
   view: string; // e.g. "inbox" or "label:Work"
   name: string; // display name; for nested labels the full "Parent/Child" path

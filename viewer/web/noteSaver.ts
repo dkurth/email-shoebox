@@ -225,7 +225,13 @@ export function anyTooBigToSendOnUnload(): boolean {
   return false;
 }
 
-/** For tests. */
+/** Save every note now (before switching collections). Resolves true if nothing is left unsaved. */
+export async function flushAll(): Promise<boolean> {
+  await Promise.all([...savers.values()].map((s) => s.flush()));
+  return [...savers.values()].every((s) => !s.dirty);
+}
+
+/** Forget every saver, saved or not (tests; and switching collections, so nothing is sent to the next one). */
 export function resetSavers(): void {
   savers.clear();
 }

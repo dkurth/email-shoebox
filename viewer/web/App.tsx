@@ -37,7 +37,9 @@ import { AdminPage } from "./AdminPage.tsx";
 import { AttachmentActionsContext } from "./attachmentActions.ts";
 import { DeleteThreadAttachments, ThreadMenu, threadAttachments } from "./ThreadMenu.tsx";
 import type { AttachmentInfo } from "../shared/types.ts";
-import { anyTooBigToSendOnUnload, flushAllOnUnload, onNoteSaved } from "./noteSaver.ts";
+import { anyTooBigToSendOnUnload, flushAll, flushAllOnUnload, onNoteSaved, resetSavers } from "./noteSaver.ts";
+import { CollectionsMenu } from "./CollectionsMenu.tsx";
+import { desktop, useCollections } from "./desktop.ts";
 
 function loadFlag(key: string): boolean {
   try {
@@ -171,10 +173,37 @@ export function App() {
     if (i >= 0) setCursor(i);
   }, [route.threadId, list]);
 
+  const collections = useCollections(!!session?.desktop);
+  const collectionName = collections.current?.name ?? null;
+
   useEffect(() => {
     const unread = sidebar?.folders.find((f) => f.view === route.view)?.count;
-    document.title = `${admin ? "Archive stats" : viewTitle(route.view)}${unread ? ` (${unread})` : ""} - Email Shoebox`;
-  }, [route.view, sidebar, admin]);
+    const where = collectionName ? ` - ${collectionName}` : "";
+    document.title = `${admin ? "Archive stats" : viewTitle(route.view)}${unread ? ` (${unread})` : ""}${where} - Email Shoebox`;
+  }, [route.view, sidebar, admin, collectionName]);
+
+  // Switching collections: the app opens the other archive and reloads this page. Save the notes first, and
+  // drop what couldn't be saved, so nothing is sent to the next collection when this page unloads.
+  async function switchCollection(id: string) {
+    const go = async () => {
+      resetSavers();
+      const r = await desktop()?.switchTo(id);
+      if (r && !r.ok) {
+        setConfirm({ title: "The collection didn’t open", body: <p>{r.error}</p>, confirmText: "OK", noCancel: true, onConfirm: () => setConfirm(null) });
+      }
+    };
+    if (await flushAll()) return go();
+    setConfirm({
+      title: "A note isn’t saved",
+      body: <p>A note couldn’t be saved. If you switch now, its newest changes are lost.</p>,
+      confirmText: "Switch anyway",
+      danger: true,
+      onConfirm: () => {
+        setConfirm(null);
+        void go();
+      },
+    });
+  }
 
   const noteSaver = useNoteSaver(route.threadId ? thread : null, route.threadId);
   const toggleNote = () =>
@@ -484,6 +513,15 @@ export function App() {
           {session?.readOnly && <span className="badge">read-only</span>}
           <SearchBox ref={searchInput} query={query} onSearch={search} onHelp={() => setSearchHelp(true)} />
           <span className="spacer" />
+          {session?.desktop && (
+            <CollectionsMenu
+              current={collections.current}
+              list={collections.list}
+              onSwitch={switchCollection}
+              onImport={() => desktop()?.openImport()}
+              onManage={() => desktop()?.openManage()}
+            />
+          )}
           <button className="icon-button" aria-label="Archive stats" title="Archive stats (g then z)" aria-pressed={admin} onClick={() => go({ view: "admin" })}>
             <ChartColumn size={20} />
           </button>
