@@ -3,8 +3,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { APP_DIR, takeoutFolder, tempDir } from "../helpers.ts";
 
+// SHOEBOX_APP_EXECUTABLE runs these tests on a packaged app (with its bundled Python), for example
+// "release/mac-arm64/Email Shoebox.app/Contents/MacOS/Email Shoebox". Without it, they run the app from dist/.
+const executable = process.env.SHOEBOX_APP_EXECUTABLE;
+
 async function launch(userData: string): Promise<ElectronApplication> {
-  return electron.launch({ args: [APP_DIR], env: { ...process.env, SHOEBOX_USER_DATA: userData, SHOEBOX_NO_UPDATES: "1" } });
+  const env = { ...process.env, SHOEBOX_USER_DATA: userData, SHOEBOX_NO_UPDATES: "1" };
+  return executable ? electron.launch({ executablePath: path.resolve(APP_DIR, executable), env }) : electron.launch({ args: [APP_DIR], env });
 }
 
 /** The next file or folder dialog returns these paths. */
@@ -139,5 +144,21 @@ test("deleting the open collection, the last one, goes back to the welcome page"
   await manage.getByRole("button", { name: "Delete…" }).click();
   await expect(manage.getByRole("heading", { name: "Welcome to Email Shoebox" })).toBeVisible();
   expect(app.windows().some(isViewer)).toBe(false);
+  await app.close();
+});
+
+test("a maintenance job runs in the app (the job workers are bundled)", async () => {
+  const app = await launch(tempDir());
+  const welcome = await app.firstWindow();
+  await nextOpenDialog(app, [takeoutFolder()]);
+  await welcome.getByRole("button", { name: /Choose a folder/ }).click();
+  await welcome.getByLabel("Name this collection").fill("Jobs");
+  const viewerOpens = app.waitForEvent("window", { predicate: isViewer });
+  await welcome.getByRole("button", { name: "Import", exact: true }).click();
+  const viewer = await viewerOpens;
+  await viewer.goto(new URL("/#/admin/maintenance", viewer.url()).href);
+  await viewer.getByRole("button", { name: "Compact database" }).click();
+  await viewer.getByRole("alertdialog").getByRole("button", { name: "Compact" }).click();
+  await expect(viewer.locator(".job-result")).toContainText("Done:");
   await app.close();
 });

@@ -1,0 +1,68 @@
+# Tests for the importer, the viewer and the desktop app.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  importer:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: importer
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+      - run: uv run python -m pytest -q
+
+  viewer:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: viewer
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: viewer/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npx playwright install --with-deps chromium
+      - run: npm run e2e
+
+  app:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            viewer/package-lock.json
+            app/package-lock.json
+      - run: npm ci
+        working-directory: viewer
+      - run: npm ci
+        working-directory: app
+      - name: Fetch the bundled Python (the tests use it)
+        run: npm run fetch-python
+        working-directory: app
+      - run: npm run typecheck
+        working-directory: app
+      - run: npm test
+        working-directory: app
+      - run: npm run build
+        working-directory: app
+      - name: End-to-end tests (Electron needs a display)
+        run: |
+          npx electron --version
+          sudo apt-get install -y xvfb
+          xvfb-run -a npm run e2e
+        working-directory: app

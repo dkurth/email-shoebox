@@ -17,7 +17,6 @@ if (process.env.SHOEBOX_USER_DATA) app.setPath("userData", process.env.SHOEBOX_U
 
 const distDir = import.meta.dirname; // dist/ (inside app.asar when packaged)
 const appDir = path.dirname(distDir);
-const unpackedDist = distDir.replace(`${path.sep}app.asar${path.sep}`, `${path.sep}app.asar.unpacked${path.sep}`);
 const UI_INDEX = path.join(distDir, "ui", "index.html");
 const UI_URL = pathToFileURL(UI_INDEX).href;
 const ICON = path.join(appDir, "build", "icon.png");
@@ -51,7 +50,7 @@ async function start(): Promise<void> {
   });
   server = new ViewerServer({
     staticDir: path.join(distDir, "viewer-web"),
-    workerUrl: (name) => pathToFileURL(path.join(unpackedDist, "workers", `${name}.js`)),
+    workerUrl: (name) => pathToFileURL(path.join(distDir, "workers", `${name}.js`)), // Electron loads workers from app.asar too
   });
   await server.start();
   // Only this app's windows have the token, so other programs can't read the mail from the local server.

@@ -1,0 +1,66 @@
+# Build the installers on macOS, Windows and Linux.
+# A tag "v1.2.3" uploads them to a draft GitHub release; "Run workflow" builds them as downloadable artifacts only.
+#
+# Signing (optional; without these the macOS app gets an ad-hoc signature, see app/scripts/dist.ts):
+#   MAC_CERTIFICATE (base64 .p12) and MAC_CERTIFICATE_PASSWORD: a Developer ID Application certificate
+#   APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID: for notarizing
+#   WIN_CERTIFICATE (base64 .pfx) and WIN_CERTIFICATE_PASSWORD: a Windows code-signing certificate
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  installers:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            args: --mac --arm64 --x64
+          - os: windows-latest
+            args: --win --x64
+          - os: ubuntu-latest
+            args: --linux --x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            viewer/package-lock.json
+            app/package-lock.json
+      - run: npm ci
+        working-directory: viewer
+      - run: npm ci
+        working-directory: app
+      - name: Make the installers
+        run: node scripts/dist.ts ${{ matrix.args }} ${{ startsWith(github.ref, 'refs/tags/v') && '--publish' || '' }}
+        working-directory: app
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ secrets.MAC_CERTIFICATE }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+          WIN_CSC_LINK: ${{ secrets.WIN_CERTIFICATE }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: installers-${{ runner.os }}
+          path: |
+            app/release/*.dmg
+            app/release/*.zip
+            app/release/*.exe
+            app/release/*.AppImage
+            app/release/*.deb
+            app/release/latest*.yml
+          if-no-files-found: error

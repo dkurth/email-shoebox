@@ -1,0 +1,53 @@
+# Packaging (electron-builder). Run it with `npm run dist` (scripts/dist.ts), which fetches Python and builds first.
+appId: io.github.dkurth.emailshoebox
+productName: Email Shoebox
+# No spaces in file names: GitHub release links (and the updater's latest*.yml) handle them badly.
+artifactName: Email-Shoebox-${version}-${os}-${arch}.${ext}
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**/*
+  - "!dist/**/*.map"
+  - package.json
+  - build/icon.png
+  # better-sqlite3's sources; only its lib/ and prebuilt binaries are needed
+  - "!node_modules/better-sqlite3/{deps,src,binding.gyp}"
+electronLanguages: [en] # the app's text is English only
+npmRebuild: false # better-sqlite3 13 uses Node-API binaries that work in Electron as they are
+extraResources:
+  - from: build/python/${platform}-${arch}/python
+    to: python
+  - from: build/importer
+    to: importer
+mac:
+  target: [dmg, zip] # electron-updater uses the zip
+  category: public.app-category.productivity
+  icon: build/icon.png
+  # scripts/dist.ts turns on hardenedRuntime and notarizing when it signs with a Developer ID.
+  hardenedRuntime: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+dmg:
+  title: Email Shoebox
+win:
+  target: nsis
+  icon: build/icon.png
+nsis:
+  artifactName: Email-Shoebox-Setup-${version}-${arch}.${ext}
+  oneClick: true
+  perMachine: false # per user: no administrator rights needed
+  deleteAppDataOnUninstall: false
+  include: build/installer.nsh # asks before deleting the imported mail
+linux:
+  target: [AppImage, deb]
+  category: Office
+  icon: build/icon.png
+  executableName: email-shoebox
+  maintainer: dkurth
+  synopsis: Keep your old emails in a shoebox
+publish:
+  provider: github
+  owner: dkurth
+  repo: email-shoebox
+  releaseType: draft
