@@ -1,3 +1,3 @@
 """Convert a Gmail Takeout mbox export into SQLite plus an attachments folder."""
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"

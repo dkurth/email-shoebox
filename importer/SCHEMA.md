@@ -164,7 +164,7 @@ viewer). Imports skip these IDs, so deleted mail doesn't come back.
 ## `imports` and `meta`
 
 - `imports`: one row per run, with `started_at`, `finished_at`, `status` (`running`/`finished`/`interrupted`/`failed`), `sources_json`, `tool_version` and counters (`messages_seen`, `inserted`, `labels_changed`, `unchanged`, `skipped`, `errors`, `kept_local`, `deleted_skipped`).
-- `meta(key, value)`: `schema_version`, `tool_version`, `last_import_at`. Viewers may add their own keys (e.g. `account_addresses`, a JSON array of the owner's addresses).
+- `meta(key, value)`: `schema_version`, `tool_version`, `last_import_at`. Viewers may add their own keys (e.g. `account_addresses`, a JSON array of the owner's addresses; `collection_name`, the name the Email Shoebox desktop app shows for the archive).
 
 ## Rules for writers (e.g. a viewer)
 

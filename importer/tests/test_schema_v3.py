@@ -3,7 +3,7 @@
 import sqlite3
 import time
 
-from build_fixtures import mbox_bytes, simple_message
+from build_fixtures import downgrade_to_v2, mbox_bytes, simple_message
 
 from gmail2sqlite import db
 from gmail2sqlite.importer import ImportOptions, run_import
@@ -117,20 +117,7 @@ def test_reimport_keeps_notes_and_deleted_attachments(tmp_path):
 
 def test_v2_archive_upgrades(tmp_path):
     _, out = _setup(tmp_path)
-    c = _conn(out)
-    # Turn this archive back into a v2 archive.
-    c.executescript(
-        """
-        DROP TRIGGER thread_notes_ai; DROP TRIGGER thread_notes_ad; DROP TRIGGER thread_notes_au;
-        DROP TABLE notes_fts; DROP TABLE thread_notes; DROP TABLE message_addresses;
-        DROP INDEX messages_list; DROP INDEX messages_size; DROP INDEX attachments_size;
-        ALTER TABLE messages DROP COLUMN list_id;
-        ALTER TABLE messages DROP COLUMN list_name;
-        ALTER TABLE attachments DROP COLUMN deleted_at;
-        UPDATE meta SET value = '2' WHERE key = 'schema_version';
-        """
-    )
-    c.close()
+    downgrade_to_v2(out / "mail.db")
     conn = db.connect(out)
     assert conn.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()[0] == "3"
     assert _addresses(conn, "21")[0] == ("bcc", "eve@example.com", "")

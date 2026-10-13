@@ -51,6 +51,8 @@ Useful options:
 gmail2sqlite import INPUT --limit 1000         # try it on the first 1,000 messages
 gmail2sqlite import INPUT --skip-spam-trash    # leave out new messages labeled Spam or Trash
 gmail2sqlite stats --out ./gmail-archive       # counts, date range, labels
+gmail2sqlite scan INPUT                        # look before importing: size, message count, dates, owner
+gmail2sqlite upgrade --out ./gmail-archive     # upgrade an older archive without importing anything
 ```
 
 **Re-running is safe and fast.** Messages are keyed by Gmail's own message ID.
@@ -65,11 +67,30 @@ Already-imported messages aren't re-parsed; only their labels are refreshed. So:
   to let the export win), notes stay, and attachment files you deleted there
   aren't written again.
 - A newer version of `gmail2sqlite` upgrades an older archive the first time it
-  imports into it. The upgrade to schema version 3 reads every message once
+  imports into it, or when you run `gmail2sqlite upgrade`. The upgrade to schema version 3 reads every message once
   (about a minute for 125,000 messages).
 
 Messages that can't be fully decoded are still stored, with whatever could be
 read, and with a note in `messages.parse_error`. `stats` shows how many there are.
+
+### For programs: JSON output
+
+The Email Shoebox desktop app runs the importer as a child process. These options make
+the output easy for a program to read. Each line on stdout is one JSON object.
+
+- `import … --progress=json` writes
+  `{"type": "progress", "bytes_done", "bytes_total", "messages", "inserted", "errors", "mbox", "mbox_index"}`
+  about 4 times a second, then one `{"type": "done", "status", "counts", "seconds"}`.
+  `status` is `finished`, `interrupted` or `failed`.
+- `import … --cancel-on-stdin` stops cleanly when stdin reads the line `cancel`
+  or closes. Messages imported so far are kept, as with Ctrl-C. SIGTERM does the same.
+- `scan … --json` writes `{"type": "files", …}` at once (for `.mbox` and `.zip`
+  inputs it includes the mbox count and uncompressed size), then `progress` lines,
+  then `{"type": "result", "messages", "uncompressed_bytes", "first_date", "last_date", "owner", …}`.
+  The scan reads at about disk speed (7.3 GB in about 6 seconds).
+- `upgrade --out DIR --json` writes `{"type": "done", "from_version", "to_version"}`.
+- Errors go to stderr as `{"type": "error", "kind": "input" | "schema" | "disk_full" | "internal", "message"}`.
+  Other stderr lines are plain text for a log.
 
 ### 2. Browse it locally with Datasette (before there's a UI)
 

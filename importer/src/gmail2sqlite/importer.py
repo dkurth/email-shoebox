@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import errno
+import json
 import sys
+import threading
 import time
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TextIO
 
 from . import db
@@ -26,6 +28,8 @@ class ImportOptions:
     skip_spam_trash: bool = False
     overwrite_local_labels: bool = False
     quiet: bool = False
+    progress: str = "auto"  # "auto" (a line on a TTY), "json" (JSON lines on stdout) or "none"
+    cancel: threading.Event | None = None  # set it to stop after the current message; the result says "interrupted"
 
 
 @dataclass
@@ -47,6 +51,12 @@ class _Reporter:
         self.enabled = enabled
         self.start = time.monotonic()
         self._last = 0.0
+        self.mbox_name = ""
+        self.mbox_index = 0
+
+    def next_mbox(self, name: str) -> None:
+        self.mbox_name = name
+        self.mbox_index += 1
 
     def tick(self, force: bool = False) -> None:
         if not self.enabled:
@@ -68,11 +78,49 @@ class _Reporter:
         self.stream.write("\r" + line.ljust(100))
         self.stream.flush()
 
-    def done(self) -> None:
+    def done(self, result: ImportResult) -> None:
         if self.enabled:
             self.tick(force=True)
             self.stream.write("\n")
             self.stream.flush()
+
+
+class _JsonReporter(_Reporter):
+    """One JSON object per line on stdout, for a program that shows the progress (the desktop app).
+
+    {"type": "progress", "bytes_done", "bytes_total", "messages", "inserted", "errors", "mbox", "mbox_index"}
+    every quarter second, then one {"type": "done", "status", "counts", "seconds"} at the end.
+    """
+
+    def __init__(self, progress: Progress, counts: dict[str, int], stream: TextIO | None = None):
+        super().__init__(progress, counts, enabled=True, stream=stream or sys.stdout)
+
+    def _emit(self, obj: dict) -> None:
+        self.stream.write(json.dumps(obj) + "\n")
+        self.stream.flush()
+
+    def tick(self, force: bool = False) -> None:
+        now = time.monotonic()
+        if not force and now - self._last < 0.25:
+            return
+        self._last = now
+        c = self.counts
+        self._emit(
+            dict(
+                type="progress",
+                bytes_done=self.progress.done,
+                bytes_total=self.progress.total,
+                messages=c["seen"],
+                inserted=c["inserted"],
+                errors=c["errors"],
+                mbox=PurePosixPath(self.mbox_name.replace("\\", "/")).name,
+                mbox_index=self.mbox_index,
+            )
+        )
+
+    def done(self, result: ImportResult) -> None:
+        self.tick(force=True)
+        self._emit(dict(type="done", status=result.status, counts=result.counts, seconds=round(result.seconds, 2)))
 
 
 def _fmt_secs(s: float) -> str:
@@ -168,7 +216,10 @@ def run_import(paths: list[str], opts: ImportOptions) -> ImportResult:
     result = ImportResult()
     counts = result.counts
     import_id = w.start_import([str(f) for f in files])
-    reporter = _Reporter(progress, counts, enabled=not opts.quiet and sys.stderr.isatty())
+    if opts.progress == "json":
+        reporter: _Reporter = _JsonReporter(progress, counts)
+    else:
+        reporter = _Reporter(progress, counts, enabled=opts.progress == "auto" and not opts.quiet and sys.stderr.isatty())
     started = time.monotonic()
     in_batch = 0
     deleted = w.deleted_ids()
@@ -176,8 +227,13 @@ def run_import(paths: list[str], opts: ImportOptions) -> ImportResult:
     try:
         w.begin()
         for src in iter_mbox_streams(files, progress):
+            reporter.next_mbox(src.name)
+            reporter.tick(force=True)
             for raw in iter_messages(src.stream):
                 if opts.limit is not None and counts["seen"] >= opts.limit:
+                    break
+                if opts.cancel is not None and opts.cancel.is_set():
+                    result.status = "interrupted"
                     break
                 counts["seen"] += 1
 
@@ -217,8 +273,9 @@ def run_import(paths: list[str], opts: ImportOptions) -> ImportResult:
                 reporter.tick()
             else:
                 continue
-            break  # --limit reached
-        result.status = "finished"
+            break  # --limit reached, or cancelled
+        if result.status == "running":
+            result.status = "finished"
     except KeyboardInterrupt:
         result.status = "interrupted"
         raise
@@ -234,6 +291,6 @@ def run_import(paths: list[str], opts: ImportOptions) -> ImportResult:
         db.set_meta(conn, "last_import_at", str(int(time.time())))
         w.commit()
         conn.close()
-        reporter.done()
         result.seconds = time.monotonic() - started
+        reporter.done(result)
     return result

@@ -195,6 +195,18 @@ class SchemaError(Exception):
     pass
 
 
+def schema_version(path: Path) -> int | None:
+    """The schema version of an existing mail.db, read without changing it."""
+    conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    try:
+        row = conn.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()
+        return int(row[0]) if row else None
+    except sqlite3.OperationalError:
+        return None
+    finally:
+        conn.close()
+
+
 def connect(out_dir: Path) -> sqlite3.Connection:
     out_dir.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(out_dir / DB_FILENAME, isolation_level=None)

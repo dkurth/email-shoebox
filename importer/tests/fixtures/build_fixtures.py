@@ -5,6 +5,7 @@ from __future__ import annotations
 import gzip
 import io
 import re
+import sqlite3
 import tarfile
 import zipfile
 from email.message import EmailMessage
@@ -91,3 +92,20 @@ def write_inputs(tmp: Path, mbox: bytes, inner_name: str = "Takeout/Mail/All mai
         zf.writestr(inner_name, mbox)
     paths["zip"] = p
     return paths
+
+
+def downgrade_to_v2(db_path: Path) -> None:
+    """Turn a current archive back into a schema v2 archive, to test upgrades."""
+    c = sqlite3.connect(db_path)
+    c.executescript(
+        """
+        DROP TRIGGER thread_notes_ai; DROP TRIGGER thread_notes_ad; DROP TRIGGER thread_notes_au;
+        DROP TABLE notes_fts; DROP TABLE thread_notes; DROP TABLE message_addresses;
+        DROP INDEX messages_list; DROP INDEX messages_size; DROP INDEX attachments_size;
+        ALTER TABLE messages DROP COLUMN list_id;
+        ALTER TABLE messages DROP COLUMN list_name;
+        ALTER TABLE attachments DROP COLUMN deleted_at;
+        UPDATE meta SET value = '2' WHERE key = 'schema_version';
+        """
+    )
+    c.close()
