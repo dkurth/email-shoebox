@@ -467,6 +467,7 @@ test("admin People: tables, group by domain, a person's page, a mailing list", a
 
 test("admin Attachments: summary, biggest first, filters, preview, open email", async ({ page }) => {
   server = await startServer();
+  await page.setViewportSize({ width: 1280, height: 480 }); // the list starts below the fold
   await page.goto(server.url + "#/admin/attachments");
   await expect(page.locator(".summary-total")).toContainText("14 attachments");
   const rows = page.locator(".admin-table.report tbody tr");
@@ -474,6 +475,9 @@ test("admin Attachments: summary, biggest first, filters, preview, open email", 
   await page.locator(".attachment-summary a", { hasText: "Images" }).click();
   await expect(page).toHaveURL(/type=Images/);
   await expect(rows).toHaveCount(6);
+  // The click brings the list into view, and the summary marks what it is filtered by.
+  await expect(page.getByRole("heading", { name: "All attachments" })).toBeInViewport();
+  await expect(page.locator(".attachment-summary tr.picked")).toContainText("Images");
   await rows.filter({ hasText: "beach.png" }).getByRole("button", { name: "Preview" }).click();
   await expect(page.locator(".lightbox-name")).toHaveText("beach.png");
   await expect(page.locator(".lightbox-details")).toContainText("Holiday media");
@@ -482,8 +486,26 @@ test("admin Attachments: summary, biggest first, filters, preview, open email", 
   await page.getByLabel("Larger than (MB)").press("Enter");
   await expect(page).toHaveURL(/min=210/);
   await expect(rows).toHaveCount(2); // sunset.jpg twice (242 B)
+  await page.getByRole("button", { name: "Show types" }).first().click(); // page state not kept in the URL
+  const scrolled = await page.locator(".admin-body").evaluate((e) => (e.scrollTop = e.scrollHeight, e.scrollTop));
+  expect(scrolled).toBeGreaterThan(0);
   await rows.first().getByRole("link", { name: "Open email" }).click();
   await expect(page.locator(".thread-title h1")).toHaveText(/Holiday media/);
+  // Back returns to the report as it was: filters, scroll position, expanded rows.
+  await page.getByTitle("Back to Archive stats (u)").click();
+  await expect(page).toHaveURL(/#\/admin\/attachments\?type=Images&min=210/);
+  await expect(rows).toHaveCount(2);
+  await expect(page.getByRole("button", { name: "Hide types" })).toHaveCount(1);
+  expect(await page.locator(".admin-body").evaluate((e) => e.scrollTop)).toBe(scrolled);
+  // u does the same, and a list view's Back still goes to the list.
+  await rows.first().getByRole("link", { name: "Open email" }).click();
+  await expect(page.locator(".thread-title h1")).toHaveText(/Holiday media/);
+  await page.keyboard.press("u");
+  await expect(page).toHaveURL(/#\/admin\/attachments\?type=Images&min=210/);
+  await page.goto(server.url + "#/inbox");
+  await page.keyboard.press("Enter");
+  await page.getByTitle("Back to list (u)").click();
+  await expect(page).toHaveURL(/#\/inbox$/);
 });
 
 test("deleting attachments: from a message, then from the report", async ({ page }) => {

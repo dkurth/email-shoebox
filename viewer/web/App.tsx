@@ -109,6 +109,15 @@ export function App() {
   }, [route.view, route.page]);
 
   const admin = route.view === "admin";
+  // A thread opened from the admin page (an attachment's "Open email"): the page stays mounted, hidden,
+  // so Back returns to it as it was (filters, scroll, expanded rows). Holds that page's path.
+  const [adminBehind, setAdminBehind] = useState<string | null>(null);
+  const [lastRoute, setLastRoute] = useState(route);
+  if (route !== lastRoute) {
+    setLastRoute(route);
+    if (!route.threadId) setAdminBehind(null);
+    else if (lastRoute.view === "admin") setAdminBehind(lastRoute.admin ?? "");
+  }
 
   useEffect(() => {
     if (admin) return;
@@ -254,7 +263,7 @@ export function App() {
     const t = threads[i];
     if (t) go({ view: route.view, page: route.page, threadId: t.threadId });
   };
-  const backToList = () => go({ view: route.view, page: route.page });
+  const backToList = () => (adminBehind !== null ? go({ view: "admin", admin: adminBehind }) : go({ view: route.view, page: route.page }));
   // In a thread, j/k open the older/newer conversation from the list.
   const step = (delta: number) => {
     const i = Math.max(0, Math.min(threads.length - 1, cursor + delta));
@@ -541,13 +550,12 @@ export function App() {
         <main className="main">
           <HighlightContext.Provider value={terms}>
           <AttachmentActionsContext.Provider value={attachmentActions}>
-          {admin ? (
-            <AdminPage path={route.admin ?? ""} me={me} readOnly={readOnly} />
-          ) : (
+          {(admin || adminBehind !== null) && <AdminPage path={admin ? (route.admin ?? "") : adminBehind!} me={me} readOnly={readOnly} hidden={!admin} />}
+          {!admin && (
           <>
           <div className="toolbar">
             {route.threadId ? (
-              <button className="icon-button" title="Back to list (u)" onClick={backToList}>
+              <button className="icon-button" title={adminBehind !== null ? "Back to Archive stats (u)" : "Back to list (u)"} onClick={backToList}>
                 <ArrowLeft size={20} />
               </button>
             ) : (

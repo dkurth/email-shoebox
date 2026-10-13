@@ -1,6 +1,6 @@
 // The admin page's Attachments tab: totals by type and sender, then every attachment, biggest first.
 // The filters live in the URL (#/admin/attachments?type=Video&min=10485760), so Back works.
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { TYPE_GROUPS } from "../shared/fileTypes.ts";
 import { previewKind } from "../shared/preview.ts";
@@ -24,7 +24,9 @@ export interface ReportExtras {
   barStart?: (rows: AttachmentRow[], total: number) => ReactNode; // left of the pager
 }
 
-function Summary({ inline, setParams, version }: { inline: boolean; setParams: AdminProps["setParams"]; version: number }) {
+/** onPick: filter the list below by a type or a sender (and bring the list into view). */
+function Summary({ params, setParams, onPick, version }: { params: URLSearchParams; setParams: AdminProps["setParams"]; onPick: (p: { type: string } | { from: string }) => void; version: number }) {
+  const inline = params.get("inline") === "1";
   const { data: s, error } = useAdminData<AttachmentSummary>("/api/admin/attachments/summary" + query({ inline: inline ? 1 : 0, v: version }));
   const [open, setOpen] = useState<Set<string>>(new Set());
   if (error) return <div className="error-banner">{error}</div>;
@@ -45,12 +47,12 @@ function Summary({ inline, setParams, version }: { inline: boolean; setParams: A
             <thead><tr><th>Type</th><th className="num">Files</th><th className="num">Size</th></tr></thead>
             {s.groups.map((g) => (
               <tbody key={g.group}>
-                <tr>
+                <tr className={params.get("type") === g.group ? "picked" : undefined}>
                   <td>
                     <button className="tree-toggle" aria-label={open.has(g.group) ? "Hide types" : "Show types"} onClick={() => setOpen((o) => { const n = new Set(o); if (n.has(g.group)) n.delete(g.group); else n.add(g.group); return n; })}>
                       {open.has(g.group) ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                     </button>
-                    <a href="#" onClick={(e) => { e.preventDefault(); setParams({ type: g.group, page: null }); }}>{g.group}</a>
+                    <a href="#" onClick={(e) => { e.preventDefault(); onPick({ type: g.group }); }}>{g.group}</a>
                   </td>
                   <td className="num">{num(g.count)}</td>
                   <td className="num">{size(g.bytes)}</td>
@@ -73,9 +75,9 @@ function Summary({ inline, setParams, version }: { inline: boolean; setParams: A
             <thead><tr><th>Sender</th><th className="num">Files</th><th className="num">Size</th></tr></thead>
             <tbody>
               {s.senders.map((p) => (
-                <tr key={p.addr}>
+                <tr key={p.addr} className={params.get("from") === p.addr ? "picked" : undefined}>
                   <td>
-                    <a href="#" title={p.name} onClick={(e) => { e.preventDefault(); setParams({ from: p.addr, page: null }); }}>{p.addr}</a>
+                    <a href="#" title={p.name} onClick={(e) => { e.preventDefault(); onPick({ from: p.addr }); }}>{p.addr}</a>
                   </td>
                   <td className="num">{num(p.count)}</td>
                   <td className="num">{size(p.bytes)}</td>
@@ -556,11 +558,16 @@ export function AttachmentsTab(props: AdminProps) {
   const deleteOne = (r: AttachmentRow) => del.ask({ ids: [r.id] });
   const dupes = params.get("dupes") === "1";
   const oneFile = params.get("sha256");
+  const list = useRef<HTMLElement>(null);
+  const pick = (p: { type: string } | { from: string }) => {
+    setParams({ ...p, page: null });
+    list.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
   return (
     <div className="admin-attachments">
       {del.ui}
-      <Summary inline={params.get("inline") === "1"} setParams={setParams} version={version} />
-      <section>
+      <Summary params={params} setParams={setParams} onPick={pick} version={version} />
+      <section ref={list}>
         <h2>All attachments</h2>
         <Filters {...props} />
         {dupes && <DupeBanner version={version} readOnly={readOnly} onMerged={() => setVersion((v) => v + 1)} />}

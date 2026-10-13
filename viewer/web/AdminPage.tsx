@@ -1,5 +1,5 @@
 // The admin page (#/admin): archive statistics, in tabs. Each tab has its own URL.
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { FOLDERS, isCategory, categoryName } from "../shared/labels.ts";
 import type { AdminImport, AdminLabel, AdminOverview, AdminPerson } from "../shared/types.ts";
@@ -29,11 +29,15 @@ const date = (epoch: number | null) => (epoch ? new Date(epoch * 1000).toLocaleD
 
 export const search = (q: string) => go({ view: `search:${q}` });
 
-/** Load JSON for a tab; reloads when `url` changes. */
+/** Bumped when the page shows again after a thread opened from it: the thread may have changed the data. */
+const RefreshContext = createContext(0);
+
+/** Load JSON for a tab; reloads when `url` changes. A reload keeps the old data until the new arrives. */
 export function useAdminData<T>(url: string): { data: T | null; error: string | null; reload: () => void } {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
+  const refresh = useContext(RefreshContext);
   useEffect(() => {
     let stale = false;
     get<T>(url).then(
@@ -43,7 +47,7 @@ export function useAdminData<T>(url: string): { data: T | null; error: string | 
     return () => {
       stale = true;
     };
-  }, [url, version]);
+  }, [url, version, refresh]);
   return { data, error, reload: () => setVersion((v) => v + 1) };
 }
 
@@ -323,8 +327,20 @@ export function parseAdminPath(path: string): { tab: string; params: URLSearchPa
   return { tab: tab || "overview", params: new URLSearchParams(query ?? "") };
 }
 
-export function AdminPage({ path, me, readOnly }: { path: string; me: string[]; readOnly: boolean }) {
+/** hidden: a thread opened from this page is showing. The page stays mounted so Back finds it as it was. */
+export function AdminPage({ path, me, readOnly, hidden = false }: { path: string; me: string[]; readOnly: boolean; hidden?: boolean }) {
   const { tab, params } = parseAdminPath(path);
+  const body = useRef<HTMLDivElement>(null);
+  const scrollTop = useRef(0);
+  const [refresh, setRefresh] = useState(0);
+  const [wasHidden, setWasHidden] = useState(hidden);
+  if (hidden !== wasHidden) {
+    setWasHidden(hidden);
+    if (!hidden) setRefresh((r) => r + 1);
+  }
+  useLayoutEffect(() => {
+    if (!hidden && body.current) body.current.scrollTop = scrollTop.current;
+  }, [hidden]);
   const page = PAGES.find((p) => p.id === tab);
   const current = page ?? TABS.find((t) => t.id === tab) ?? TABS[0];
   const activeTab = page ? page.under : current.id;
@@ -340,7 +356,7 @@ export function AdminPage({ path, me, readOnly }: { path: string; me: string[]; 
     go({ view: "admin", admin: `${nextTab === "overview" && !q ? "" : nextTab}${q ? `?${q}` : ""}` });
   };
   return (
-    <div className="admin-page">
+    <div className="admin-page" hidden={hidden}>
       <nav className="admin-tabs" role="tablist">
         {TABS.map((t) => (
           <a
@@ -354,7 +370,9 @@ export function AdminPage({ path, me, readOnly }: { path: string; me: string[]; 
           </a>
         ))}
       </nav>
-      <div className="admin-body">{current.render({ params, me, readOnly, setParams })}</div>
+      <div className="admin-body" ref={body} onScroll={(e) => (scrollTop.current = e.currentTarget.scrollTop)}>
+        <RefreshContext.Provider value={refresh}>{current.render({ params, me, readOnly, setParams })}</RefreshContext.Provider>
+      </div>
     </div>
   );
 }
