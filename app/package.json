@@ -18,7 +18,8 @@
     "dist": "node scripts/dist.ts",
     "test": "vitest run",
     "e2e": "playwright test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "update": "node scripts/install-local.ts"
   },
   "dependencies": {
     "better-sqlite3": "13.0.3",
