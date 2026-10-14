@@ -211,6 +211,8 @@ export function createApp(opts: AppOptions): Hono {
 
   app.get("/api/attachments/:id/download", (c) => serveAttachment(c, archive, intParam(c.req.param("id")), "download"));
   app.get("/api/attachments/:id/inline", (c) => serveAttachment(c, archive, intParam(c.req.param("id")), "inline"));
+  // The same, with the file name last in the URL: the PDF viewer shows that name as its title.
+  app.get("/api/attachments/:id/inline/:name", (c) => serveAttachment(c, archive, intParam(c.req.param("id")), "inline"));
 
   // ---- writes (the guard already refused them in read-only mode)
   app.post("/api/threads/modify", async (c) => {

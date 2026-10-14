@@ -6,6 +6,7 @@ import type { AttachmentRow, AttachmentSummary, DupeGroup } from "../shared/type
 import type { DB } from "./db.ts";
 
 export const REPORT_PAGE = 100;
+export const SUMMARY_SENDERS = 100; // the summary's sender table scrolls
 
 const q = (s: string) => `'${s.replace(/'/g, "''")}'`; // our own fixed strings only
 
@@ -42,7 +43,7 @@ export function summary(db: DB, inline: boolean): AttachmentSummary {
     .prepare(
       `SELECT a.addr, max(a.name) AS name, count(*) AS n, sum(x.size_bytes) AS bytes
        FROM attachments x JOIN message_addresses a ON a.message_id = x.message_id AND a.role = 'from'
-       WHERE ${where} GROUP BY a.addr ORDER BY bytes DESC LIMIT 20`,
+       WHERE ${where} GROUP BY a.addr ORDER BY bytes DESC LIMIT ${SUMMARY_SENDERS}`,
     )
     .all() as { addr: string; name: string; n: number; bytes: number }[];
   return {

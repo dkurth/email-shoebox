@@ -1,7 +1,7 @@
 // The app shell: header, sidebar, toolbar, and either the thread list or one thread.
 // Owns routing, data loading, the list cursor and selection, and every action.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ChartColumn, ChevronDown, ChevronLeft, ChevronRight, EllipsisVertical, Keyboard, Moon, Sun } from "lucide-react";
+import { ArrowLeft, ArrowRight, ChartColumn, ChevronDown, ChevronLeft, ChevronRight, EllipsisVertical, Keyboard, Moon, Sun } from "lucide-react";
 import { isSearchView, isUserLabel, removeAction, searchQuery, viewLabel, viewTitle } from "../shared/labels.ts";
 import { highlightTerms, parseQuery } from "../shared/search.ts";
 import type {
@@ -18,7 +18,8 @@ import type {
 import { get, post, q } from "./api.ts";
 import { size } from "./format.ts";
 import { ConfirmDialog, type ConfirmData } from "./ConfirmDialog.tsx";
-import { useKeyboard } from "./keyboard.ts";
+import { BACK_KEYS, FORWARD_KEYS, useHistoryKeys, useKeyboard } from "./keyboard.ts";
+import { firstPlace, nextPlace, type Place } from "./history.ts";
 import { LabelMenu } from "./LabelMenu.tsx";
 import { go, parseHash, type Route } from "./route.ts";
 import { ShortcutHelp } from "./ShortcutHelp.tsx";
@@ -89,9 +90,19 @@ export function App() {
 
   const readOnly = session?.readOnly ?? true;
 
+  // Where this page is in the app's history, for the Back and Forward buttons.
+  const [place, setPlace] = useState<Place>(() => {
+    if (!location.hash) history.replaceState(history.state, "", "#/inbox");
+    return firstPlace();
+  });
+  const placeNow = useRef(place);
+
   useEffect(() => {
-    if (!location.hash) history.replaceState(null, "", "#/inbox");
-    const onHash = () => setRoute(parseHash(location.hash));
+    const onHash = () => {
+      setRoute(parseHash(location.hash));
+      placeNow.current = nextPlace(placeNow.current);
+      setPlace(placeNow.current);
+    };
     window.addEventListener("hashchange", onHash);
     get<Session>("/api/session").then(setSession, (e) => setError(e.message));
     return () => window.removeEventListener("hashchange", onHash);
@@ -109,12 +120,15 @@ export function App() {
   }, [route.view, route.page]);
 
   const admin = route.view === "admin";
-  // A thread opened from the admin page (an attachment's "Open email"): the page stays mounted, hidden,
-  // so Back returns to it as it was (filters, scroll, expanded rows). Holds that page's path.
+  // Once shown, the admin page stays mounted (hidden while mail shows), so going back to it finds it as it
+  // was: filters, scroll, expanded rows, selection. keptAdmin is its path.
+  const [keptAdmin, setKeptAdmin] = useState<string | null>(admin ? (route.admin ?? "") : null);
+  // A thread opened from the admin page (an attachment's "Open email"): the arrow above it returns there.
   const [adminBehind, setAdminBehind] = useState<string | null>(null);
   const [lastRoute, setLastRoute] = useState(route);
   if (route !== lastRoute) {
     setLastRoute(route);
+    if (admin) setKeptAdmin(route.admin ?? "");
     if (!route.threadId) setAdminBehind(null);
     else if (lastRoute.view === "admin") setAdminBehind(lastRoute.admin ?? "");
   }
@@ -183,6 +197,7 @@ export function App() {
   }, [route.threadId, list]);
 
   const collections = useCollections(!!session?.desktop);
+  useHistoryKeys(!!session?.desktop);
   const collectionName = collections.current?.name ?? null;
 
   useEffect(() => {
@@ -520,6 +535,14 @@ export function App() {
             <img className="brand-icon" src={logoUrl} alt="" width={28} height={28} /> Email Shoebox
             {session?.readOnly && <span className="badge">read-only</span>}
           </a>
+          <span className="history-buttons">
+            <button className="icon-button" aria-label="Back" title={`Back (${BACK_KEYS})`} disabled={place.idx <= 0} onClick={() => history.back()}>
+              <ArrowLeft size={20} />
+            </button>
+            <button className="icon-button" aria-label="Forward" title={`Forward (${FORWARD_KEYS})`} disabled={place.idx >= place.max} onClick={() => history.forward()}>
+              <ArrowRight size={20} />
+            </button>
+          </span>
           <SearchBox ref={searchInput} query={query} onSearch={search} onHelp={() => setSearchHelp(true)} />
           <span className="spacer" />
           {session?.desktop && (
@@ -550,7 +573,9 @@ export function App() {
         <main className="main">
           <HighlightContext.Provider value={terms}>
           <AttachmentActionsContext.Provider value={attachmentActions}>
-          {(admin || adminBehind !== null) && <AdminPage path={admin ? (route.admin ?? "") : adminBehind!} me={me} readOnly={readOnly} hidden={!admin} />}
+          {(admin || keptAdmin !== null) && (
+            <AdminPage path={admin ? (route.admin ?? "") : keptAdmin!} me={me} readOnly={readOnly} hidden={!admin} scrollKey={admin ? `admin:${place.idx}` : null} />
+          )}
           {!admin && (
           <>
           <div className="toolbar">
@@ -619,7 +644,7 @@ export function App() {
           {route.threadId ? (
             thread ? (
               <div className="thread-area">
-                <ThreadView key={thread.threadId} thread={thread} me={me} view={route.view} onToggleStar={readOnly ? undefined : actions.star} />
+                <ThreadView key={thread.threadId} scrollKey={`thread:${place.idx}`} thread={thread} me={me} view={route.view} onToggleStar={readOnly ? undefined : actions.star} />
                 {noteOpen && noteSaver && noteSaver.threadId === thread.threadId && (
                   <NotePanel key={thread.threadId} saver={noteSaver} readOnly={readOnly} />
                 )}
@@ -630,6 +655,7 @@ export function App() {
           ) : list ? (
             <ThreadList
               key={`${route.view}/${route.page}`}
+              scrollKey={`list:${place.idx}`}
               data={list}
               cursor={cursor}
               selected={selected}

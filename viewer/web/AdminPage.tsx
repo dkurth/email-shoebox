@@ -10,6 +10,7 @@ import { PeopleTab, PersonPage } from "./AdminPeople.tsx";
 import { AttachmentsTab } from "./AdminAttachments.tsx";
 import { ImagesTab } from "./AdminImages.tsx";
 import { MaintenanceTab } from "./AdminMaintenance.tsx";
+import { useScrollMemory } from "./history.ts";
 
 export interface AdminTab {
   id: string;
@@ -327,8 +328,11 @@ export function parseAdminPath(path: string): { tab: string; params: URLSearchPa
   return { tab: tab || "overview", params: new URLSearchParams(query ?? "") };
 }
 
-/** hidden: a thread opened from this page is showing. The page stays mounted so Back finds it as it was. */
-export function AdminPage({ path, me, readOnly, hidden = false }: { path: string; me: string[]; readOnly: boolean; hidden?: boolean }) {
+/**
+ * hidden: mail is showing. The page stays mounted so going back finds it as it was.
+ * scrollKey: this history entry (null while hidden), so Back and Forward return to the same scroll position.
+ */
+export function AdminPage({ path, me, readOnly, hidden = false, scrollKey }: { path: string; me: string[]; readOnly: boolean; hidden?: boolean; scrollKey: string | null }) {
   const { tab, params } = parseAdminPath(path);
   const body = useRef<HTMLDivElement>(null);
   const scrollTop = useRef(0);
@@ -341,6 +345,7 @@ export function AdminPage({ path, me, readOnly, hidden = false }: { path: string
   useLayoutEffect(() => {
     if (!hidden && body.current) body.current.scrollTop = scrollTop.current;
   }, [hidden]);
+  useScrollMemory(body, scrollKey);
   const page = PAGES.find((p) => p.id === tab);
   const current = page ?? TABS.find((t) => t.id === tab) ?? TABS[0];
   const activeTab = page ? page.under : current.id;

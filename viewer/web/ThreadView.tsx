@@ -1,11 +1,12 @@
 // One conversation, as in Gmail: subject, then one card per message (read ones collapsed).
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useScrollMemory } from "./history.ts";
 import { ChevronDown, Download, File, FileArchive, FileAudio, FileImage, FileSpreadsheet, FileText, FileVideo, Mail, Trash2, type LucideIcon } from "lucide-react";
 import { previewKind } from "../shared/preview.ts";
 import type { Address, AttachmentInfo, MessageDetail, ThreadDetail } from "../shared/types.ts";
 import { EmailBody } from "./EmailBody.tsx";
 import { displayName, fullDate, recipientsLine, relative, size } from "./format.ts";
-import { Lightbox } from "./Lightbox.tsx";
+import { inLightbox, Lightbox } from "./Lightbox.tsx";
 import { useAttachmentActions } from "./attachmentActions.ts";
 import { Hl, useHighlight } from "./highlight.tsx";
 import { findMatches } from "../shared/search.ts";
@@ -66,11 +67,13 @@ function FileIcon({ type }: { type: string }) {
 }
 
 /** The file type icon and the "no preview" fallback. */
-function FileChip({ a, href, newTab }: { a: AttachmentInfo; href: string; newTab?: boolean }) {
+/** onOpen: a plain click shows the file here (a PDF in the lightbox); Cmd/Ctrl-click still opens a new window. */
+function FileChip({ a, href, newTab, onOpen }: { a: AttachmentInfo; href: string; newTab?: boolean; onOpen?: () => void }) {
   return (
     <a
       className="file-chip"
       href={href}
+      onClick={onOpen && inLightbox(onOpen)}
       {...(newTab ? { target: "_blank", rel: "noopener noreferrer" } : { download: a.filename ?? "" })}
       title={`${newTab ? "Open" : "Download"} ${a.filename ?? "attachment"}`}
     >
@@ -157,6 +160,7 @@ function MediaAttachment({ a, kind }: { a: AttachmentInfo; kind: "audio" | "vide
 
 function Attachments({ m }: { m: MessageDetail }) {
   const [viewing, setViewing] = useState<number | null>(null);
+  const [pdf, setPdf] = useState<AttachmentInfo | null>(null);
   // Inline images the HTML shows itself aren't listed again.
   const html = m.bodyHtml?.toLowerCase() ?? "";
   const list = m.attachments.filter((a) => !(a.isInline && a.contentId && html.includes(`cid:${a.contentId.toLowerCase()}`)));
@@ -188,7 +192,7 @@ function Attachments({ m }: { m: MessageDetail }) {
             if (kind === "pdf" || kind === "text") {
               return (
                 <li key={a.id} className="attachment">
-                  <FileChip a={a} href={`/api/attachments/${a.id}/inline`} newTab />
+                  <FileChip a={a} href={`/api/attachments/${a.id}/inline`} newTab onOpen={kind === "pdf" ? () => setPdf(a) : undefined} />
                   <DownloadIcon a={a} />
                   <DeleteIcon a={a} />
                 </li>
@@ -210,6 +214,9 @@ function Attachments({ m }: { m: MessageDetail }) {
           onIndex={setViewing}
           onClose={() => setViewing(null)}
         />
+      )}
+      {pdf && (
+        <Lightbox items={[{ id: pdf.id, kind: "pdf", name: pdf.filename || "(no name)", size: pdf.size }]} index={0} onIndex={() => {}} onClose={() => setPdf(null)} />
       )}
     </div>
   );
@@ -261,8 +268,9 @@ function MessageCard({ m, me, expanded, onToggle }: { m: MessageDetail; me: stri
   );
 }
 
-export function ThreadView({ thread, me, view, onToggleStar }: {
+export function ThreadView({ thread, me, view, onToggleStar, scrollKey }: {
   thread: ThreadDetail;
+  scrollKey: string; // this history entry, so Back and Forward return to the same scroll position
   me: string[];
   view: string;
   onToggleStar?: () => void; // omitted in read-only mode
@@ -300,8 +308,11 @@ export function ThreadView({ thread, me, view, onToggleStar }: {
       return next;
     });
 
+  const pane = useRef<HTMLDivElement>(null);
+  useScrollMemory(pane, scrollKey);
+
   return (
-    <div className="thread-view">
+    <div className="thread-view" ref={pane}>
       <div className="thread-title">
         <h1>{thread.subject ? <Hl text={thread.subject} /> : "(no subject)"}</h1>
         <button

@@ -8,7 +8,7 @@ import type { AttachmentRow, AttachmentSummary, DedupeProgress, DupeGroup, JobSt
 import { get, post, q as query } from "./api.ts";
 import { ConfirmDialog, type ConfirmData } from "./ConfirmDialog.tsx";
 import { fullDate, size } from "./format.ts";
-import { Lightbox } from "./Lightbox.tsx";
+import { inLightbox, Lightbox } from "./Lightbox.tsx";
 import { go } from "./route.ts";
 import { SortHeader, useAdminData, type AdminProps } from "./AdminPage.tsx";
 
@@ -22,6 +22,32 @@ export interface ReportExtras {
   rowEnd?: (r: AttachmentRow) => ReactNode;
   headStart?: (rows: AttachmentRow[]) => ReactNode; // the header cell above rowStart
   barStart?: (rows: AttachmentRow[], total: number) => ReactNode; // left of the pager
+}
+
+/** A box of fixed height that scrolls. The bottom edge fades while there is more below, so it reads as scrollable. */
+function ScrollBox({ children }: { children: ReactNode }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [more, setMore] = useState(false);
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const check = () => setMore(el.scrollTop + el.clientHeight < el.scrollHeight - 1);
+    check();
+    // The content grows when a type is expanded or the data arrives.
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    if (el.firstElementChild) ro.observe(el.firstElementChild);
+    el.addEventListener("scroll", check, { passive: true });
+    return () => {
+      ro.disconnect();
+      el.removeEventListener("scroll", check);
+    };
+  }, []);
+  return (
+    <div className={`summary-scroll${more ? " more-below" : ""}`}>
+      <div className="summary-box" ref={box}>{children}</div>
+    </div>
+  );
 }
 
 /** onPick: filter the list below by a type or a sender (and bring the list into view). */
@@ -43,6 +69,7 @@ function Summary({ params, setParams, onPick, version }: { params: URLSearchPara
       <div className="summary-columns">
         <section>
           <h2>By type</h2>
+          <ScrollBox>
           <table className="admin-table">
             <thead><tr><th>Type</th><th className="num">Files</th><th className="num">Size</th></tr></thead>
             {s.groups.map((g) => (
@@ -68,9 +95,11 @@ function Summary({ params, setParams, onPick, version }: { params: URLSearchPara
               </tbody>
             ))}
           </table>
+          </ScrollBox>
         </section>
         <section>
-          <h2>By sender (top 20)</h2>
+          <h2>{s.senders.length >= 100 ? "By sender (top 100)" : "By sender"}</h2>
+          <ScrollBox>
           <table className="admin-table">
             <thead><tr><th>Sender</th><th className="num">Files</th><th className="num">Size</th></tr></thead>
             <tbody>
@@ -85,6 +114,7 @@ function Summary({ params, setParams, onPick, version }: { params: URLSearchPara
               ))}
             </tbody>
           </table>
+          </ScrollBox>
         </section>
       </div>
     </div>
@@ -130,13 +160,14 @@ function Filters({ params, setParams }: AdminProps) {
   );
 }
 
-function Preview({ r, onImage }: { r: AttachmentRow; onImage: () => void }) {
+function Preview({ r, onImage, onPdf }: { r: AttachmentRow; onImage: () => void; onPdf: () => void }) {
   const [playing, setPlaying] = useState(false);
   if (r.deletedAt) return null;
   const kind = previewKind(r.contentType, r.filename);
   const src = `/api/attachments/${r.id}/inline`;
   if (kind === "image") return <button className="link-button" onClick={onImage}>Preview</button>;
-  if (kind === "pdf" || kind === "text") return <a href={src} target="_blank" rel="noopener noreferrer">Open</a>;
+  if (kind === "pdf") return <a href={src} target="_blank" rel="noopener noreferrer" onClick={inLightbox(onPdf)}>Preview</a>;
+  if (kind === "text") return <a href={src} target="_blank" rel="noopener noreferrer">Open</a>;
   if (kind === "audio" || kind === "video") {
     return playing ? (
       kind === "audio" ? <audio controls autoPlay src={src} className="report-player" /> : <video controls autoPlay src={src} className="report-player" />
@@ -160,6 +191,7 @@ export function AttachmentList(props: AdminProps & ReportExtras & { version?: nu
   const { params, setParams } = props;
   const { data, error } = useAdminData<{ rows: AttachmentRow[]; total: number }>(reportUrl(params) + `${params.toString() ? "&" : "?"}v=${props.version ?? 0}`);
   const [viewing, setViewing] = useState<number | null>(null);
+  const [pdf, setPdf] = useState<AttachmentRow | null>(null);
   const page = Number(params.get("page") ?? 1);
   const sort = params.get("sort") ?? "size";
   const desc = params.get("desc") !== "0";
@@ -196,7 +228,7 @@ export function AttachmentList(props: AdminProps & ReportExtras & { version?: nu
             {header("date", "Date")}
             {header("sender", "From")}
             <th>Subject</th>
-            <th />
+            <th colSpan={props.rowEnd ? 4 : 3} />
           </tr>
         </thead>
         <tbody>
@@ -219,12 +251,15 @@ export function AttachmentList(props: AdminProps & ReportExtras & { version?: nu
               <td>{fullDate(r.date)}</td>
               <td title={r.fromName ?? ""}>{r.fromAddr}</td>
               <td className="subject-cell">{r.subject || "(no subject)"}</td>
-              <td className="row-actions">
+              {/* One cell per action, so each lines up with the same action in the other rows. */}
+              <td className="action-cell">
                 <a href="#" onClick={(e) => { e.preventDefault(); go({ view: "all", threadId: r.threadId }); }}>Open email</a>
-                {!r.deletedAt && <a href={`/api/attachments/${r.id}/download`} download={r.filename ?? ""}>Download</a>}
-                <Preview r={r} onImage={() => setViewing(images.findIndex((i) => i.id === r.id))} />
-                {props.rowEnd?.(r)}
               </td>
+              <td className="action-cell">{!r.deletedAt && <a href={`/api/attachments/${r.id}/download`} download={r.filename ?? ""}>Download</a>}</td>
+              <td className="action-cell">
+                <Preview r={r} onImage={() => setViewing(images.findIndex((i) => i.id === r.id))} onPdf={() => setPdf(r)} />
+              </td>
+              {props.rowEnd && <td className="action-cell">{props.rowEnd(r)}</td>}
             </tr>
           ))}
         </tbody>
@@ -240,6 +275,14 @@ export function AttachmentList(props: AdminProps & ReportExtras & { version?: nu
           index={viewing}
           onIndex={setViewing}
           onClose={() => setViewing(null)}
+        />
+      )}
+      {pdf && (
+        <Lightbox
+          items={[{ id: pdf.id, kind: "pdf", name: pdf.filename || "(no name)", size: pdf.size, details: <>{fullDate(pdf.date)} · {pdf.fromName || pdf.fromAddr} · {pdf.subject || "(no subject)"}</> }]}
+          index={0}
+          onIndex={() => {}}
+          onClose={() => setPdf(null)}
         />
       )}
     </>

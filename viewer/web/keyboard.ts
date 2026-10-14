@@ -3,6 +3,10 @@ import { useEffect, useRef } from "react";
 
 export type KeyHandlers = Record<string, (() => void) | undefined>;
 
+const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
+export const BACK_KEYS = MAC ? "⌘[" : "Alt-←";
+export const FORWARD_KEYS = MAC ? "⌘]" : "Alt-→";
+
 /** Keys as they appear in the help overlay. */
 export const SHORTCUTS: [string, string][] = [
   ["j / k", "Older / newer conversation (moves the cursor in the list)"],
@@ -15,15 +19,47 @@ export const SHORTCUTS: [string, string][] = [
   ["l", "Labels menu"],
   ["Shift-i / Shift-u", "Mark as read / unread"],
   ["z", "Undo the last action"],
+  [`${BACK_KEYS} / ${FORWARD_KEYS}`, "Back / Forward"],
   ["g then i / s / t / a / d / z", "Go to Inbox / Starred / Sent / All Mail / Drafts / Archive stats"],
   ["/", "Search (click ⓘ in the search box for the search options)"],
   ["?", "Show or hide this help"],
 ];
 
-function typing(target: EventTarget | null): boolean {
+export function typing(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;
   if (!el) return false;
   return el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName) && (el as HTMLInputElement).type !== "checkbox";
+}
+
+/**
+ * Back and Forward from the keyboard and the mouse's side buttons. Only for the desktop app: a browser
+ * does these itself.
+ */
+export function useHistoryKeys(enabled: boolean): void {
+  useEffect(() => {
+    if (!enabled) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (typing(e.target) || e.shiftKey) return;
+      const mod = MAC ? e.metaKey && !e.altKey && !e.ctrlKey : e.altKey && !e.metaKey && !e.ctrlKey;
+      if (!mod) return;
+      const back = MAC ? e.key === "[" || e.key === "ArrowLeft" : e.key === "ArrowLeft";
+      const forward = MAC ? e.key === "]" || e.key === "ArrowRight" : e.key === "ArrowRight";
+      if (!back && !forward) return;
+      e.preventDefault();
+      if (back) history.back();
+      else history.forward();
+    };
+    const onMouse = (e: MouseEvent) => {
+      if (e.button === 3) history.back();
+      else if (e.button === 4) history.forward();
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("mouseup", onMouse);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("mouseup", onMouse);
+    };
+  }, [enabled]);
 }
 
 /**

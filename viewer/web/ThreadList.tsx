@@ -1,5 +1,6 @@
 // The Gmail-style list of threads: checkbox · star · participants · subject — snippet · chips · paperclip · date.
 import { useEffect, useRef, type ReactNode } from "react";
+import { useScrollMemory } from "./history.ts";
 import { Paperclip, Star } from "lucide-react";
 import { labelColor } from "../shared/labelColors.ts";
 import { isCategory, categoryName, isUserLabel } from "../shared/labels.ts";
@@ -48,9 +49,11 @@ export function ThreadList(props: {
   onCursor: (i: number) => void;
   noteSnippets?: boolean; // the Notes folder: the snippet is the note's first line
   emptyText?: ReactNode;
+  scrollKey: string; // this history entry, so Back and Forward return to the same scroll position
 }) {
   const { data, cursor, selected } = props;
   const list = useRef<HTMLUListElement>(null);
+  useScrollMemory(list, props.scrollKey);
 
   // Keep the cursor row on screen when j/k moves it.
   useEffect(() => {

@@ -7,6 +7,7 @@ import { TOKEN_COOKIE } from "../../../viewer/server/security.ts";
 import { CH, type Collection, type ImportRequest, type ViewerApi } from "../shared/api.ts";
 import { formatBytes } from "../shared/format.ts";
 import { findPython } from "./importer.ts";
+import { watchPdfLightboxKeys } from "./pdfKeys.ts";
 import { startupCollection, viewToOpen } from "./registry.ts";
 import { ViewerServer, SwitchError } from "./server.ts";
 import { folderSize, Service, ServiceError } from "./service.ts";
@@ -373,6 +374,7 @@ function registerIpc(): void {
 // ---------------------------------------------------------------- links and navigation
 
 app.on("web-contents-created", (_e, contents: WebContents) => {
+  watchPdfLightboxKeys(contents);
   contents.on("will-navigate", (e, url) => {
     if (!allowedInApp(url)) {
       e.preventDefault();

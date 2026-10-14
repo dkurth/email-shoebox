@@ -241,7 +241,7 @@ test("the moon button switches dark mode on and off, and the choice is remembere
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
 });
 
-test("shows image, audio and video attachments, and opens PDFs in a tab", async ({ page }) => {
+test("shows image, audio and video attachments, and PDFs in the lightbox", async ({ page }) => {
   server = await startServer();
   await page.goto(server.url + "#/label/Media");
   await page.locator(".thread-row", { hasText: "Holiday media" }).filter({ hasNotText: "Fwd" }).click();
@@ -268,6 +268,15 @@ test("shows image, audio and video attachments, and opens PDFs in a tab", async 
   const res = await page.request.get(server.url + (await pdf.getAttribute("href"))!.slice(1));
   expect(res.headers()["content-type"]).toBe("application/pdf");
   expect(res.headers()["content-disposition"]).toMatch(/^inline;/);
+  // A plain click shows it here, framed, with a Download button; the link still opens a window on Cmd/Ctrl-click.
+  await pdf.click();
+  const box = page.getByRole("dialog", { name: "PDF: minutes.pdf" });
+  await expect(box.locator("iframe.lightbox-pdf")).toHaveAttribute("src", /\/api\/attachments\/\d+\/inline\/minutes\.pdf$/);
+  const framed = await page.request.get(server.url + (await box.locator("iframe").getAttribute("src"))!.slice(1));
+  expect(framed.headers()["content-type"]).toBe("application/pdf");
+  await expect(box.getByRole("link", { name: "Download" })).toHaveAttribute("href", /\/api\/attachments\/\d+\/download$/);
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".lightbox")).toHaveCount(0);
 });
 
 test("notes: autosave, saved on leaving and on reload, cleared, read back", async ({ page }) => {
@@ -472,6 +481,9 @@ test("admin Attachments: summary, biggest first, filters, preview, open email", 
   await expect(page.locator(".summary-total")).toContainText("14 attachments");
   const rows = page.locator(".admin-table.report tbody tr");
   await expect(rows.first()).toContainText("voice-memo.mp3");
+  await rows.filter({ hasText: "minutes.pdf" }).getByRole("link", { name: "Preview" }).click();
+  await expect(page.getByRole("dialog", { name: "PDF: minutes.pdf" }).locator(".lightbox-details")).toContainText("Holiday media");
+  await page.keyboard.press("Escape");
   await page.locator(".attachment-summary a", { hasText: "Images" }).click();
   await expect(page).toHaveURL(/type=Images/);
   await expect(rows).toHaveCount(6);
@@ -669,4 +681,53 @@ test("deleting an attachment leaves the open messages as they are", async ({ pag
   await page.getByRole("alertdialog").getByRole("button", { name: "Delete attachment" }).click();
   await expect(page.locator(".file-chip.deleted", { hasText: "report.xlsx" })).toContainText("(deleted)");
   await expect(page.locator(".msg.expanded")).toHaveCount(2); // still open
+});
+
+test("Back and Forward step through the app's history, and pages come back as they were", async ({ page }) => {
+  server = await startServer();
+  await page.setViewportSize({ width: 1280, height: 480 });
+  await page.goto(server.url + "#/admin/attachments");
+  const back = page.getByRole("button", { name: "Back", exact: true });
+  const forward = page.getByRole("button", { name: "Forward", exact: true });
+  await expect(back).toBeDisabled();
+  await expect(forward).toBeDisabled();
+  const rows = page.locator(".admin-table.report tbody tr");
+  await page.locator(".attachment-summary a", { hasText: "Images" }).click();
+  await expect(rows).toHaveCount(6);
+  await page.getByRole("button", { name: "Show types" }).first().click();
+  const scrolled = await page.locator(".admin-body").evaluate((e) => (e.scrollTop = e.scrollHeight, e.scrollTop));
+  expect(scrolled).toBeGreaterThan(0);
+  // Away to the mail: a list, then a conversation.
+  await page.keyboard.press("g");
+  await page.keyboard.press("a");
+  await expect(page).toHaveURL(/#\/all$/);
+  await page.locator(".thread-row").first().click();
+  await expect(page.locator(".thread-title h1")).toBeVisible();
+  await back.click();
+  await expect(page).toHaveURL(/#\/all$/);
+  await back.click();
+  await expect(page).toHaveURL(/#\/admin\/attachments\?type=Images$/);
+  await expect(rows).toHaveCount(6);
+  await expect(page.getByRole("button", { name: "Hide types" })).toHaveCount(1);
+  await expect.poll(() => page.locator(".admin-body").evaluate((e) => e.scrollTop)).toBe(scrolled);
+  await back.click();
+  await expect(page).toHaveURL(/#\/admin\/attachments$/);
+  await expect(back).toBeDisabled();
+  await forward.click();
+  await forward.click();
+  await expect(page).toHaveURL(/#\/all$/);
+  await forward.click();
+  await expect(page.locator(".thread-title h1")).toBeVisible();
+  await expect(forward).toBeDisabled();
+
+  // A person in the People tab runs a search; Back returns to the People tab.
+  await page.goto(server.url + "#/admin/people?dir=received");
+  await page.locator(".people-table a", { hasText: "news@shop.example" }).click();
+  await expect(page).toHaveURL(/#\/search\//);
+  await back.click();
+  await expect(page).toHaveURL(/#\/admin\/people\?dir=received$/);
+  // A new page after Back ends the Forward list, as in a browser.
+  await page.keyboard.press("g");
+  await page.keyboard.press("i");
+  await expect(forward).toBeDisabled();
 });

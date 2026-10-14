@@ -144,7 +144,7 @@ a { color: var(--accent); }
 .image-card .thumb img { width: 100%; height: 120px; object-fit: cover; display: block; }
 .image-card .file-chip { border: 0; border-radius: 0; max-width: none; padding: 6px 8px; font-size: 12px; }
 
-.lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.94); z-index: 30; display: flex; flex-direction: column; color: #fff; }
+.lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.8); z-index: 30; display: flex; flex-direction: column; color: #fff; }
 .lightbox-top { display: flex; align-items: center; gap: 12px; padding: 8px 16px; background: #000; }
 .lightbox-top .spacer { flex: 1; }
 .lightbox-name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -154,6 +154,7 @@ a { color: var(--accent); }
 .lightbox-top .icon-button:hover { background: rgba(255,255,255,.15); }
 .lightbox-stage { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; min-height: 0; padding: 16px 64px; }
 .lightbox-stage img { max-width: 100%; max-height: 100%; object-fit: contain; background: #fff; }
+.lightbox-stage .lightbox-pdf { width: 100%; height: 100%; max-width: 1100px; border: 0; background: #fff; }
 .lightbox-nav { display: flex; align-items: center; justify-content: center; position: absolute; top: 50%; transform: translateY(-50%); border: 0; background: rgba(255,255,255,.12); color: #fff; font-size: 36px; width: 48px; height: 64px; border-radius: 8px; cursor: pointer; }
 .lightbox-nav:hover { background: rgba(255,255,255,.25); }
 .lightbox-nav.prev { left: 8px; }
@@ -187,6 +188,7 @@ kbd { background: var(--chip); border-radius: 4px; padding: 1px 6px; font: 12px 
 .select-banner { background: var(--hover); text-align: center; padding: 8px; font-size: 13px; }
 .toolbar .text-button { font-size: 13px; }
 .topbar .spacer { flex: 1; }
+.history-buttons { display: flex; margin-left: -16px; }
 .actions { display: flex; gap: 6px; flex-wrap: wrap; margin-left: 8px; }
 .trash-bar { background: var(--hover); padding: 10px 16px; display: flex; gap: 12px; justify-content: center; font-size: 13px; }
 
@@ -295,11 +297,24 @@ mark.hl { background: #fde293; color: inherit; border-radius: 2px; }
 .muted { color: var(--muted); }
 .row-actions { white-space: nowrap; }
 .row-actions > * + * { margin-left: 12px; }
+.admin-table td.action-cell { white-space: nowrap; padding-right: 12px; width: 1px; } /* as narrow as its content */
 .person-page h1 { font-size: 24px; font-weight: 400; margin: 12px 0 2px; }
 .person-links { display: flex; gap: 8px; margin: 16px 0; flex-wrap: wrap; }
 .person-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 0 32px; }
 .back-link { font-size: 13px; display: inline-flex; align-items: center; gap: 4px; }
 .summary-total { display: flex; align-items: baseline; gap: 24px; flex-wrap: wrap; }
+/* By type and By sender: the same height, each scrolling, so the list below shows without scrolling the page. */
+.summary-scroll { position: relative; }
+.summary-box { height: 320px; overflow-y: auto; }
+/* There is more below: the last rows fade out. */
+.summary-scroll::after { content: ""; position: absolute; left: 0; right: 12px; bottom: 0; height: 48px; background: linear-gradient(transparent, var(--panel)); pointer-events: none; opacity: 0; transition: opacity .15s; }
+.summary-scroll.more-below::after { opacity: 1; }
+/* A scrollbar that stays visible (macOS hides unstyled ones until you scroll). */
+.summary-box::-webkit-scrollbar { width: 8px; }
+.summary-box::-webkit-scrollbar-track { background: transparent; }
+.summary-box::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, transparent); border-radius: 4px; }
+.summary-box::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+.summary-box thead th { position: sticky; top: 0; z-index: 1; background: var(--panel); border-bottom: 0; box-shadow: inset 0 -1px var(--line); }
 .summary-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 0 32px; }
 .admin-table .sub-row td { color: var(--muted); font-size: 12px; padding-left: 20px; }
 .admin-table .sub-row td.mono { padding-left: 24px; }
