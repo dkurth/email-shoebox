@@ -66,12 +66,26 @@ test("first launch: choose a backup, name it, import it, read it", async () => {
   // Other programs can't read the mail from the local server: they don't have the token.
   const res = await fetch(new URL("/api/session", viewer.url()));
   expect(res.status).toBe(403);
+
+  // Read a thread in a smaller window, then quit.
+  await viewer.locator(".thread-row", { hasText: "Welcome to the archive" }).click();
+  await expect(viewer).toHaveURL(/#\/inbox\/t\/.+/);
+  const threadHash = new URL(viewer.url()).hash;
+  await app.evaluate(({ BrowserWindow }, origin) => {
+    BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().startsWith(origin))!.setBounds({ x: 40, y: 60, width: 1000, height: 700 });
+  }, new URL(viewer.url()).origin);
   await app.close();
 
-  // The next start opens the same collection at once.
+  // The next start opens the same collection at once, at the same thread, in a window of the same size and place.
   const again = await launch(userData);
   const v2 = await viewerWindow(again);
   await expect(v2.locator(".collection-button")).toHaveText("Personal");
+  await expect(v2).toHaveURL(new RegExp(`${threadHash.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}$`));
+  await expect(v2.locator(".thread-view")).toContainText("Welcome to the archive");
+  const bounds = await again.evaluate(({ BrowserWindow }, origin) => {
+    return BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().startsWith(origin))!.getBounds();
+  }, new URL(v2.url()).origin);
+  expect(bounds).toEqual({ x: 40, y: 60, width: 1000, height: 700 });
   await again.close();
 });
 
@@ -128,15 +142,28 @@ test("the collections menu: import another, switch, rename, delete", async () =>
   await expect(inbox.filter({ hasText: "Welcome to the archive" })).toBeVisible();
   await expect(inbox.filter({ hasText: "Postcard from Lisbon" })).toHaveCount(0);
 
-  // Switching from inside a thread shows the other collection's inbox too.
+  // Each collection keeps its own place: open a thread in each, and switching goes back to it.
+  const threadView = viewer.locator(".thread-view");
+  const switchTo = async (name: RegExp) => {
+    await viewer.locator(".collection-button").click();
+    await viewer.getByRole("menuitem", { name }).click();
+  };
   await inbox.filter({ hasText: "Welcome to the archive" }).click();
-  await expect(viewer).toHaveURL(/#\/inbox\/.+/);
-  await viewer.locator(".collection-button").click();
-  await viewer.getByRole("menuitem", { name: /Old letters from the family/ }).click();
-  await expect(inbox.filter({ hasText: "Postcard from Lisbon" })).toBeVisible();
-  await viewer.locator(".collection-button").click();
-  await viewer.getByRole("menuitem", { name: /First/ }).click();
-  await expect(inbox.filter({ hasText: "Welcome to the archive" })).toBeVisible();
+  await expect(viewer).toHaveURL(/#\/inbox\/t\/.+/);
+  const firstPlace = new URL(viewer.url()).hash;
+  await switchTo(/Old letters from the family/);
+  await expect(viewer).toHaveURL(/#\/inbox$/); // where it was: the inbox, not the other collection's thread
+  await inbox.filter({ hasText: "Postcard from Lisbon" }).click();
+  await expect(threadView).toContainText("Postcard from Lisbon");
+  const secondPlace = new URL(viewer.url()).hash;
+  await switchTo(/First/);
+  await expect(threadView).toContainText("Welcome to the archive");
+  expect(new URL(viewer.url()).hash).toBe(firstPlace);
+  await switchTo(/Old letters from the family/);
+  await expect(threadView).toContainText("Postcard from Lisbon");
+  expect(new URL(viewer.url()).hash).toBe(secondPlace);
+  await switchTo(/First/);
+  await expect(threadView).toContainText("Welcome to the archive");
 
   // Manage: rename one, delete the other.
   await viewer.locator(".collection-button").click();

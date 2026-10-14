@@ -5,6 +5,7 @@ import type { Collection } from "../src/shared/api.ts";
 import {
   addMissingFromFolder,
   EMPTY,
+  isViewHash,
   loadRegistry,
   markOpened,
   namesInUse,
@@ -13,6 +14,7 @@ import {
   slug,
   startupCollection,
   uniqueName,
+  viewToOpen,
 } from "../src/main/registry.ts";
 import { tempDir } from "./helpers.ts";
 
@@ -63,6 +65,15 @@ describe("registry", () => {
     markOpened(reg, "a", 5);
     expect(startupCollection(reg)?.id).toBe("a");
     expect(startupCollection(structuredClone(EMPTY))).toBeUndefined();
+  });
+
+  it("goes back to the last place in a collection, if it's a viewer address", () => {
+    expect(viewToOpen(col("a", "A"))).toBe("#/inbox");
+    expect(viewToOpen(col("a", "A", { lastView: "#/label/Work%2FProjects/p2/t/179" }))).toBe("#/label/Work%2FProjects/p2/t/179");
+    expect(isViewHash("#/admin/people?dir=sent")).toBe(true);
+    for (const bad of ["", "#inbox", "https://example.com/#/inbox", "#/inbox#/x", "#/a b", "#/" + "x".repeat(2000), 42]) {
+      expect(isViewHash(bad)).toBe(false);
+    }
   });
 
   it("adds archive folders that the list doesn't know", () => {

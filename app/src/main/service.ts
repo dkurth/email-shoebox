@@ -22,6 +22,7 @@ import {
   addCollection,
   addMissingFromFolder,
   findCollection,
+  isViewHash,
   loadRegistry,
   markIncomplete,
   namesInUse,
@@ -60,6 +61,8 @@ export class Service {
   private scanRun: Running | null = null;
   private scanId = 0;
 
+  private saveTimer: NodeJS.Timeout | null = null;
+
   constructor(opts: ServiceOptions) {
     this.dataDir = opts.dataDir;
     this.collectionsDir = path.join(opts.dataDir, "collections");
@@ -73,7 +76,19 @@ export class Service {
   }
 
   save(): void {
+    if (this.saveTimer) clearTimeout(this.saveTimer);
+    this.saveTimer = null;
     saveRegistry(this.registryFile, this.reg);
+  }
+
+  /** Save a change made with rememberView now, instead of a moment later (the app is quitting). */
+  flush(): void {
+    if (!this.saveTimer) return;
+    try {
+      this.save();
+    } catch {
+      /* only the place in the mail is lost */
+    }
   }
 
   get(id: string): Collection {
@@ -145,6 +160,17 @@ export class Service {
     updateCollection(this.reg, id, { lastOpenedAt: this.now() });
     this.reg.lastOpenedId = id;
     this.save();
+  }
+
+  /**
+   * Remember where the viewer is in a collection (its URL hash), to go back there at the next start. Saved a
+   * moment later, so going through the mail with j and k doesn't write the file at each step.
+   */
+  rememberView(id: string, hash: string): void {
+    const c = findCollection(this.reg, id);
+    if (!c || !isViewHash(hash) || c.lastView === hash) return;
+    c.lastView = hash;
+    this.saveTimer ??= setTimeout(() => this.flush(), 1000).unref();
   }
 
   private assertNotImporting(id: string): void {

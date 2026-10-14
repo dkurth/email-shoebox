@@ -1,5 +1,5 @@
 // The Electron main process: windows, menus, dialogs, and the bridge between the pages and the service.
-import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell, type IpcMainInvokeEvent, type MenuItemConstructorOptions, type WebContents } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, screen, session, shell, type IpcMainInvokeEvent, type MenuItemConstructorOptions, type WebContents } from "electron";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -7,10 +7,11 @@ import { TOKEN_COOKIE } from "../../../viewer/server/security.ts";
 import { CH, type Collection, type ImportRequest, type ViewerApi } from "../shared/api.ts";
 import { formatBytes } from "../shared/format.ts";
 import { findPython } from "./importer.ts";
-import { startupCollection } from "./registry.ts";
+import { startupCollection, viewToOpen } from "./registry.ts";
 import { ViewerServer, SwitchError } from "./server.ts";
 import { folderSize, Service, ServiceError } from "./service.ts";
 import { checkForUpdates } from "./updater.ts";
+import { boundsOnScreen, loadWindowState, saveWindowState } from "./windowState.ts";
 
 // Tests (and anyone who wants a second, separate set of collections) can choose the data folder.
 if (process.env.SHOEBOX_USER_DATA) app.setPath("userData", process.env.SHOEBOX_USER_DATA);
@@ -85,6 +86,8 @@ const baseWebPreferences = { contextIsolation: true, sandbox: true, nodeIntegrat
 
 let loads = 0;
 
+const windowStateFile = () => path.join(app.getPath("userData"), "window.json");
+
 function showMainWindow(hash = "#/inbox"): BrowserWindow {
   if (mainWindow && !mainWindow.isDestroyed()) {
     // Another collection is open now: load the page again. A new query makes it a new document; with only a new
@@ -93,9 +96,11 @@ function showMainWindow(hash = "#/inbox"): BrowserWindow {
     reveal(mainWindow);
     return mainWindow;
   }
+  // The size and place it had last time, if that's still on a screen.
+  const saved = loadWindowState(windowStateFile());
+  const bounds = saved && boundsOnScreen(saved.bounds, screen.getAllDisplays().map((d) => d.workArea));
   const w = new BrowserWindow({
-    width: 1280,
-    height: 860,
+    ...(bounds ?? { width: 1280, height: 860 }),
     minWidth: 720,
     minHeight: 480,
     title: "Email Shoebox",
@@ -104,7 +109,21 @@ function showMainWindow(hash = "#/inbox"): BrowserWindow {
     webPreferences: { ...baseWebPreferences, preload: path.join(distDir, "preload-viewer.cjs") },
   });
   mainWindow = w;
-  w.once("ready-to-show", () => reveal(w));
+  w.once("ready-to-show", () => {
+    if (saved?.maximized && !hidden) w.maximize();
+    reveal(w);
+  });
+  // Remember where the viewer is in the mail, to go back there at the next start.
+  const remember = () => server.currentId && service.rememberView(server.currentId, new URL(w.webContents.getURL()).hash);
+  w.webContents.on("did-navigate-in-page", remember);
+  w.webContents.on("did-navigate", remember);
+  w.on("close", () => {
+    try {
+      saveWindowState(windowStateFile(), { bounds: w.getNormalBounds(), maximized: w.isMaximized() });
+    } catch {
+      /* the window opens at the default size next time */
+    }
+  });
   w.on("closed", () => {
     if (mainWindow === w) mainWindow = null;
   });
@@ -201,7 +220,7 @@ async function openCollection(c: Collection, opts: { atStartup?: boolean } = {})
     return message;
   }
   service.markOpened(c.id);
-  showMainWindow();
+  showMainWindow(viewToOpen(c)); // where the viewer was in this collection last time
   collectionsChanged();
   return null;
 }
@@ -439,7 +458,7 @@ app.on("window-all-closed", () => {
 
 app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length) return;
-  if (server?.currentId) showMainWindow();
+  if (server?.currentId) showMainWindow(viewToOpen(service.get(server.currentId)));
   else showAppWindow(service?.reg.collections.length ? "manage" : "welcome");
 });
 
@@ -474,5 +493,6 @@ app.on("before-quit", (e) => {
 });
 
 app.on("will-quit", () => {
+  service?.flush();
   server?.stop();
 });

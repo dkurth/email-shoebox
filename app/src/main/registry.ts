@@ -25,11 +25,15 @@ export function loadRegistry(file: string): Registry {
   return structuredClone(EMPTY);
 }
 
-/** Write to a temporary file first, so a crash never leaves half a file. */
 export function saveRegistry(file: string, reg: Registry): void {
+  writeJsonFile(file, reg);
+}
+
+/** Write to a temporary file first, so a crash never leaves half a file. */
+export function writeJsonFile(file: string, data: unknown): void {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = `${file}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(reg, null, 2) + "\n");
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 2) + "\n");
   fs.renameSync(tmp, file);
 }
 
@@ -106,6 +110,16 @@ export function startupCollection(reg: Registry): Collection | undefined {
     (reg.lastOpenedId ? findCollection(reg, reg.lastOpenedId) : undefined) ??
     [...reg.collections].sort((a, b) => (b.lastOpenedAt ?? b.createdAt) - (a.lastOpenedAt ?? a.createdAt))[0]
   );
+}
+
+/** A viewer URL hash that is safe to load again: "#/" and a path, such as "#/search/from%3Aann/p2". */
+export function isViewHash(hash: unknown): hash is string {
+  return typeof hash === "string" && hash.length <= 2000 && /^#\/[^\s#]*$/.test(hash);
+}
+
+/** Where to open the viewer in a collection: where it was last time, else the inbox. */
+export function viewToOpen(c: Collection): string {
+  return isViewHash(c.lastView) ? c.lastView : "#/inbox";
 }
 
 /** Remember what an unfinished import was reading, so "Continue import" can run it again. */

@@ -8,6 +8,8 @@ export interface Collection {
   lastOpenedAt: number | null;
   /** Set while an import into this collection hasn't finished (cancelled, failed, or the app quit). */
   incomplete: { paths: string[]; skipSpamTrash: boolean } | null;
+  /** Where the viewer was in this collection (its URL hash, e.g. "#/label/Work/t/123"), to go back there next time. */
+  lastView?: string | null;
 }
 
 export interface CollectionInfo extends Collection {

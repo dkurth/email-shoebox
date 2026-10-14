@@ -179,6 +179,19 @@ describe("changing collections", () => {
     expect(svc.list(null)[0]).toMatchObject({ missing: false, path: moved });
   });
 
+  it("remembers where the viewer was, saving a moment later", () => {
+    const dataDir = tempDir();
+    const svc = service(dataDir);
+    svc.reg.collections.push({ id: "a", name: "A", path: tempDir(), createdAt: 1, lastOpenedAt: null, incomplete: null });
+    svc.save();
+    svc.rememberView("a", "#/label/Work/t/123");
+    svc.rememberView("a", "not a place"); // ignored
+    svc.rememberView("gone", "#/inbox"); // no such collection: ignored
+    expect(service(dataDir).get("a").lastView).toBeUndefined(); // not saved yet
+    svc.flush();
+    expect(service(dataDir).get("a").lastView).toBe("#/label/Work/t/123");
+  });
+
   it("upgrades an older archive", async () => {
     const { svc, c } = await withCollection();
     const Database = (await import("better-sqlite3")).default;
