@@ -1,7 +1,7 @@
 // Choose a backup, name the collection, import it with a progress bar. Used by the welcome page,
 // File > Import… (a new collection) and Manage > Import into this collection.
 import { FileArchive, FolderOpen, TriangleAlert } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import type { CollectionInfo, ImportRequest, ImportState, QuickLook, ScanResult, StorageInfo } from "../src/shared/api.ts";
 import { formatBytes, formatCount, formatDuration } from "../src/shared/format.ts";
 import { api, message } from "./api.ts";
@@ -223,9 +223,9 @@ export function ImportFlow({ mode, collectionId, welcome }: Props) {
                 )}
               </label>
               {storage && (
-                <div className="path">
-                  {storage.parent}
-                  {storage.freeBytes !== null && <span> · {formatBytes(storage.freeBytes)} free</span>}
+                <div className="path path-free">
+                  <span>{storage.parent.split(/(?<=[/\\])/).map((part, i) => <Fragment key={i}>{part}<wbr /></Fragment>)}</span>
+                  {storage.freeBytes !== null && <span className="free">{formatBytes(storage.freeBytes)} free</span>}
                 </div>
               )}
             </div>

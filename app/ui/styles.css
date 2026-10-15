@@ -49,6 +49,10 @@ a { color: var(--accent); }
 .muted { color: var(--muted); }
 .small { font-size: 12px; }
 .path { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); word-break: break-all; }
+/* A path with the free space beside it: the path wraps, the free space stays whole on the right. */
+.path-free { display: flex; align-items: baseline; gap: 12px; }
+.path-free > :first-child { flex: 1; min-width: 0; word-break: normal; overflow-wrap: anywhere; } /* breaks after a slash (<wbr>) where it can */
+.path-free .free { flex: none; white-space: nowrap; }
 
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
 .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
