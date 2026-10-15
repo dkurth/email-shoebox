@@ -28,9 +28,9 @@ function run(cmd: string, args: string[], cwd = appDir): void {
   }
 }
 
-/** Is the copy we replace running? (Not some other copy, such as one started from app/release.) */
-function running(): boolean {
-  return spawnSync("pgrep", ["-f", `${target}/Contents/MacOS/${APP_NAME}`]).status === 0;
+/** Is this copy of the app running? (Not some other copy, such as one started from app/release.) */
+function running(app = target): boolean {
+  return spawnSync("pgrep", ["-f", `${app}/Contents/MacOS/${APP_NAME}`]).status === 0;
 }
 
 function sleep(ms: number): void {
@@ -68,6 +68,9 @@ if (running()) {
 console.log(`Installing ${target}…`);
 fs.rmSync(target, { recursive: true, force: true });
 run("ditto", [built, target]);
+
+// 5. Remove the build's copy, so Spotlight and Launchpad find only the installed one. Not while it's running.
+if (!running(built)) fs.rmSync(built, { recursive: true, force: true });
 
 const version = JSON.parse(fs.readFileSync(path.join(appDir, "package.json"), "utf8")).version;
 const commit = spawnSync("git", ["rev-parse", "--short", "HEAD"], { cwd: repo, encoding: "utf8" }).stdout.trim();
